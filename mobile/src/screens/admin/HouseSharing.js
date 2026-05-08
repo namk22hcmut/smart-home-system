@@ -1,7 +1,7 @@
 /**
  * HouseSharing.js - Admin House Sharing Management
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,8 @@ import { Picker } from '@react-native-picker/picker';
 import { apiService } from '../../services/api';
 
 export default function HouseSharing({ navigation }) {
+  const isMounted = useRef(true);
+  
   const [houses, setHouses] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -25,37 +27,45 @@ export default function HouseSharing({ navigation }) {
   const [selectedHouse, setSelectedHouse] = useState(null);
   const [houseUsers, setHouseUsers] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
+  const [editingAccessLevel, setEditingAccessLevel] = useState(null);  // Track which user to edit
+  const [changeAccessLevelModalVisible, setChangeAccessLevelModalVisible] = useState(false);  // Modal for changing role
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedAccessLevel, setSelectedAccessLevel] = useState('viewer');
 
   // Load houses and users
   const loadData = async (showLoader = true) => {
-    if (showLoader) setLoading(true);
-    setRefreshing(true);
+    if (showLoader && isMounted.current) setLoading(true);
+    if (isMounted.current) setRefreshing(true);
     try {
       console.log('🏠 Loading houses and users...');
       const housesResponse = await apiService.get('/houses');
       const usersResponse = await apiService.get('/admin/users');
 
-      console.log('Houses response:', housesResponse.data);
-      console.log('Users response:', usersResponse.data);
+      console.log('Houses response:', housesResponse);
+      console.log('Users response:', usersResponse);
 
-      if (housesResponse.data.success) {
-        setHouses(housesResponse.data.data);
-        console.log('✅ Loaded', housesResponse.data.data.length, 'houses');
-      } else {
-        console.error('❌ Houses response failed:', housesResponse.data);
-      }
-      if (usersResponse.data.success) {
-        setUsers(usersResponse.data.data);
-        console.log('✅ Loaded', usersResponse.data.data.length, 'users');
+      if (isMounted.current) {
+        if (housesResponse.success) {
+          setHouses(housesResponse.data);
+          console.log('✅ Loaded', housesResponse.data.length, 'houses');
+        } else {
+          console.error('❌ Houses response failed:', housesResponse);
+        }
+        if (usersResponse.success) {
+          setUsers(usersResponse.data);
+          console.log('✅ Loaded', usersResponse.data.length, 'users');
+        }
       }
     } catch (error) {
       console.error('❌ Error loading data:', error);
-      Alert.alert('Error', 'Failed to load data: ' + error.message);
+      if (isMounted.current) {
+        Alert.alert('Error', 'Failed to load data: ' + error.message);
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (isMounted.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
@@ -63,14 +73,21 @@ export default function HouseSharing({ navigation }) {
   const loadHouseUsers = async (houseId) => {
     try {
       const response = await apiService.get(`/admin/houses/${houseId}/users`);
-      if (response.data.success) {
-        setHouseUsers(response.data.data);
-        console.log('✅ Loaded', response.data.data.length, 'users for house');
+      if (isMounted.current && response.success) {
+        setHouseUsers(response.data);
+        console.log('✅ Loaded', response.data.length, 'users for house');
       }
     } catch (error) {
       console.error('❌ Error:', error);
     }
   };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   // Initial load (only once on mount)
   useEffect(() => {
@@ -98,15 +115,38 @@ export default function HouseSharing({ navigation }) {
         access_level: selectedAccessLevel,
       });
 
-      if (response.data.success) {
+      if (response.success) {
         Alert.alert('Success', 'House shared successfully!');
-        loadHouseUsers(selectedHouse.id);
-        setModalVisible(false);
-        setSelectedUser(null);
-        setSelectedAccessLevel('viewer');
+        await loadHouseUsers(selectedHouse.id);
+        closeAddUserModal();
       }
     } catch (error) {
       Alert.alert('Error', error.message || 'Failed to share house');
+    }
+  };
+
+  // Change user access level
+  const changeAccessLevel = async () => {
+    if (!editingAccessLevel || !selectedHouse) {
+      Alert.alert('Error', 'Missing data');
+      return;
+    }
+
+    try {
+      const response = await apiService.post(
+        `/api/admin/houses/${selectedHouse.id}/users/${editingAccessLevel.user_id}/access-level`,
+        { access_level: selectedAccessLevel }
+      );
+
+      if (response.success) {
+        Alert.alert('Success', 'Access level changed!');
+        await loadHouseUsers(selectedHouse.id);
+        closeChangeAccessLevelModal();
+      } else {
+        Alert.alert('Error', response.error || 'Failed to change access level');
+      }
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Failed to change access level');
     }
   };
 
@@ -123,13 +163,13 @@ export default function HouseSharing({ navigation }) {
           onPress: async () => {
             try {
               const response = await apiService.post(
-                `/admin/houses/${selectedHouse.id}/unshare`,
+                `/api/admin/houses/${selectedHouse.id}/unshare`,
                 { target_user_id: userId }
               );
 
-              if (response.data.success) {
+              if (response.success) {
                 Alert.alert('Success', 'Access removed!');
-                loadHouseUsers(selectedHouse.id);
+                await loadHouseUsers(selectedHouse.id);
               }
             } catch (error) {
               Alert.alert('Error', error.message || 'Failed to unshare');
@@ -138,6 +178,26 @@ export default function HouseSharing({ navigation }) {
         },
       ]
     );
+  };
+
+  // Close modals and reset states
+  const closeAddUserModal = () => {
+    setModalVisible(false);
+    setSelectedUser(null);
+    setSelectedAccessLevel('viewer');
+  };
+
+  const closeChangeAccessLevelModal = () => {
+    setChangeAccessLevelModalVisible(false);
+    setEditingAccessLevel(null);
+    setSelectedAccessLevel('viewer');
+  };
+
+  // Open change access level modal
+  const openChangeAccessLevelModal = (user) => {
+    setEditingAccessLevel(user);
+    setSelectedAccessLevel(user.access_level);
+    setChangeAccessLevelModalVisible(true);
   };
 
   // Render house item
@@ -168,12 +228,20 @@ export default function HouseSharing({ navigation }) {
           {getAccessLevelIcon(item.access_level)} {item.access_level.toUpperCase()}
         </Text>
       </View>
-      <TouchableOpacity
-        style={styles.removeBtn}
-        onPress={() => unshareHouse(item.user_id)}
-      >
-        <Text style={styles.removeBtnText}>Remove</Text>
-      </TouchableOpacity>
+      <View style={styles.userActions}>
+        <TouchableOpacity
+          style={styles.editRoleBtn}
+          onPress={() => openChangeAccessLevelModal(item)}
+        >
+          <Text style={styles.editRoleBtnText}>✎ Edit</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.removeBtn}
+          onPress={() => unshareHouse(item.user_id)}
+        >
+          <Text style={styles.removeBtnText}>🗑 Remove</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
@@ -250,7 +318,7 @@ export default function HouseSharing({ navigation }) {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Share House with User</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
+              <TouchableOpacity onPress={closeAddUserModal}>
                 <Text style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -303,7 +371,7 @@ export default function HouseSharing({ navigation }) {
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.button, { backgroundColor: '#95a5a6' }]}
-                onPress={() => setModalVisible(false)}
+                onPress={closeAddUserModal}
               >
                 <Text style={styles.buttonText}>Cancel</Text>
               </TouchableOpacity>
@@ -312,6 +380,67 @@ export default function HouseSharing({ navigation }) {
                 onPress={shareHouse}
               >
                 <Text style={styles.buttonText}>Share</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Change Access Level Modal */}
+      <Modal visible={changeAccessLevelModalVisible} transparent animationType="slide">
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Change Access Level</Text>
+              <TouchableOpacity onPress={closeChangeAccessLevelModal}>
+                <Text style={styles.closeButton}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              {editingAccessLevel && (
+                <>
+                  <View style={styles.userInfoSection}>
+                    <Text style={styles.userInfoLabel}>User:</Text>
+                    <Text style={styles.userInfoValue}>{editingAccessLevel.username}</Text>
+                    <Text style={styles.userInfoEmail}>{editingAccessLevel.email}</Text>
+                  </View>
+
+                  <Text style={styles.pickerLabel}>New Access Level:</Text>
+                  <View style={styles.picker}>
+                    <Picker
+                      selectedValue={selectedAccessLevel}
+                      onValueChange={(value) => setSelectedAccessLevel(value)}
+                      style={styles.pickerInput}
+                    >
+                      <Picker.Item label="👁️ Viewer (Read Only)" value="viewer" />
+                      <Picker.Item label="🔧 Manager (Control)" value="manager" />
+                      <Picker.Item label="👑 Owner (Full Access)" value="owner" />
+                    </Picker>
+                  </View>
+
+                  <Text style={styles.infoText}>
+                    • Viewer: Can only view devices and data{'\n'}
+                    • Manager: Can control devices and view history{'\n'}
+                    • Owner: Full access including permissions
+                  </Text>
+                </>
+              )}
+            </View>
+
+            {/* Modal Actions */}
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: '#95a5a6' }]}
+                onPress={closeChangeAccessLevelModal}
+              >
+                <Text style={styles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: '#3498db' }]}
+                onPress={changeAccessLevel}
+              >
+                <Text style={styles.buttonText}>Update</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -450,6 +579,21 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
+  userActions: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  editRoleBtn: {
+    backgroundColor: '#3498db',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+  },
+  editRoleBtnText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+  },
   removeBtn: {
     backgroundColor: '#e74c3c',
     paddingVertical: 4,
@@ -460,6 +604,28 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 11,
     fontWeight: '600',
+  },
+  userInfoSection: {
+    backgroundColor: '#ecf0f1',
+    padding: 12,
+    borderRadius: 6,
+    marginBottom: 16,
+  },
+  userInfoLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#7f8c8d',
+    marginBottom: 4,
+  },
+  userInfoValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2c3e50',
+  },
+  userInfoEmail: {
+    fontSize: 12,
+    color: '#95a5a6',
+    marginTop: 2,
   },
   emptyText: {
     textAlign: 'center',

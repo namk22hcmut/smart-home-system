@@ -23,9 +23,9 @@ export default function SystemStats({ navigation }) {
     setRefreshing(true);
     try {
       const response = await apiService.get('/admin/stats');
-      if (response.data.success) {
-        setStats(response.data.data);
-        console.log('✅ Statistics loaded:', response.data.data);
+      if (response.success) {
+        setStats(response.data);
+        console.log('✅ Statistics loaded:', response.data);
       }
     } catch (error) {
       console.error('❌ Error loading stats:', error);

@@ -1743,6 +1743,43 @@ def admin_share_house(house_id):
         return jsonify({'success': True, 'message': 'House shared'}), 200
     return jsonify({'success': False, 'error': 'Failed to share house'}), 500
 
+@app.route('/api/admin/houses/<int:house_id>/unshare', methods=['POST'])
+@require_admin
+def admin_unshare_house(house_id):
+    """Revoke house access from a user"""
+    data = request.json
+    owner_id = request.user_id
+    target_user_id = data.get('target_user_id')
+    
+    if not target_user_id:
+        return jsonify({'success': False, 'error': 'target_user_id required'}), 400
+    
+    success = AdminService.unshare_house(house_id, owner_id, target_user_id)
+    if success:
+        log_activity('house_unshared', 'house', house_id, f'Removed access for user {target_user_id}')
+        return jsonify({'success': True, 'message': 'House access removed'}), 200
+    return jsonify({'success': False, 'error': 'Failed to remove access'}), 500
+
+@app.route('/api/admin/houses/<int:house_id>/users/<int:user_id>/access-level', methods=['POST'])
+@require_admin
+def admin_change_user_access_level(house_id, user_id):
+    """Change access level for a user on a house"""
+    data = request.json
+    owner_id = request.user_id
+    new_access_level = data.get('access_level')
+    
+    if not new_access_level:
+        return jsonify({'success': False, 'error': 'access_level required'}), 400
+    
+    if new_access_level not in ['viewer', 'manager', 'owner']:
+        return jsonify({'success': False, 'error': 'Invalid access level'}), 400
+    
+    success = AdminService.change_access_level(house_id, owner_id, user_id, new_access_level)
+    if success:
+        log_activity('access_level_changed', 'house', house_id, f'User {user_id} access level changed to {new_access_level}')
+        return jsonify({'success': True, 'message': 'Access level changed'}), 200
+    return jsonify({'success': False, 'error': 'Failed to change access level'}), 500
+
 @app.route('/api/admin/houses/<int:house_id>/users', methods=['GET'])
 @require_admin
 def admin_get_house_users(house_id):

@@ -2,7 +2,7 @@
  * UserDevicesScreen.js - User Device Management
  * Allow users to create, edit, delete devices in their room
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,8 @@ import CustomSlider from '../components/CustomSlider';
 
 export default function UserDevicesScreen({ navigation, route }) {
   const { roomId, roomName } = route.params;
+  const isMounted = useRef(true);
+  
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -34,6 +36,13 @@ export default function UserDevicesScreen({ navigation, route }) {
     status: 'off',
     level: '0',
   });
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   const deviceTypes = [
     'light',
@@ -129,30 +138,43 @@ export default function UserDevicesScreen({ navigation, route }) {
   const deleteDevice = async (deviceId) => {
     console.log('🗑️ Delete button clicked for device:', deviceId);
     
-    const confirmed = window.confirm('Delete this device?\nThis action cannot be undone');
-    if (!confirmed) {
-      console.log('❌ Delete cancelled');
-      return;
-    }
-
-    try {
-      console.log('📤 Sending DELETE request to /api/devices/' + deviceId);
-      const response = await apiService.delete(`/devices/${deviceId}`);
-      console.log('✅ Delete response:', response);
-      
-      if (response && response.success) {
-        console.log('✅ Device deleted successfully!');
-        Alert.alert('Success', 'Device deleted!');
-        await loadDevices(false);
-      } else {
-        Alert.alert('Error', response?.error || 'Failed to delete');
-      }
-    } catch (error) {
-      console.error('❌ Delete error:', error);
-      const errorMsg = error.response?.data?.error || error.message || 'Failed to delete device';
-      console.error('Error details:', errorMsg);
-      Alert.alert('Error', errorMsg);
-    }
+    Alert.alert(
+      'Delete Device',
+      'Delete this device? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          onPress: () => {
+            console.log('❌ Delete cancelled');
+          },
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          onPress: async () => {
+            try {
+              console.log('📤 Sending DELETE request to /api/devices/' + deviceId);
+              const response = await apiService.delete(`/devices/${deviceId}`);
+              console.log('✅ Delete response:', response);
+              
+              if (response && response.success) {
+                console.log('✅ Device deleted successfully!');
+                Alert.alert('Success', 'Device deleted!');
+                await loadDevices(false);
+              } else {
+                Alert.alert('Error', response?.error || 'Failed to delete');
+              }
+            } catch (error) {
+              console.error('❌ Delete error:', error);
+              const errorMsg = error.response?.data?.error || error.message || 'Failed to delete device';
+              console.error('Error details:', errorMsg);
+              Alert.alert('Error', errorMsg);
+            }
+          },
+          style: 'destructive',
+        },
+      ]
+    );
   };
 
   // Toggle device status

@@ -25,9 +25,9 @@ export default function ActivityLogs({ navigation }) {
     setRefreshing(true);
     try {
       const response = await apiService.get('/admin/activity-logs?limit=100');
-      if (response.data.success) {
-        setLogs(response.data.data);
-        console.log('✅ Loaded', response.data.data.length, 'activity logs');
+      if (response.success) {
+        setLogs(response.data);
+        console.log('✅ Loaded', response.data.length, 'activity logs');
       }
     } catch (error) {
       console.error('❌ Error loading logs:', error);

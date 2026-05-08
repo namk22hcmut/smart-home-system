@@ -96,22 +96,35 @@ const DashboardScreen = ({ navigation }) => {
       const response = await apiService.get('/houses');
       console.log('🏠 Houses response:', response);
       
-      if (response.success && response.houses) {
-        setHouses(response.houses);
+      if (response.success && response.data) {
+        // Map backend data to match expected format
+        const housesData = response.data.map(h => ({
+          house_id: h.id,
+          name: h.name,
+          house_name: h.name,
+          address: h.address,
+          floors: h.floors
+        }));
+        
+        setHouses(housesData);
+        console.log('✅ Loaded houses:', housesData.length);
         
         // Set initial house
         let initialSelected = initialHouse;
-        if (!initialSelected && response.houses.length > 0) {
-          initialSelected = response.houses[0];
+        if (!initialSelected && housesData.length > 0) {
+          initialSelected = housesData[0];
         }
         
         if (initialSelected) {
           setSelectedHouse(initialSelected);
         }
+      } else {
+        console.warn('⚠️ No houses in response:', response);
+        Alert.alert('No Houses', 'You don\'t have any houses yet. Create one first.');
       }
     } catch (error) {
       console.error('❌ Error loading houses:', error);
-      Alert.alert('Error', 'Failed to load houses');
+      Alert.alert('Error', 'Failed to load houses: ' + error.message);
     } finally {
       setLoading(false);
     }

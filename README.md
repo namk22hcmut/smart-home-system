@@ -1,219 +1,162 @@
-# 🏠 Smart Home Backend - Complete Implementation
+# 🏠 Smart Home IoT Management System
 
-## ✅ Project Status: READY TO DEPLOY
-
-This is a **rebuilt from scratch** Smart Home system with proper **level column** support from day 1.
-
----
-
-## 📦 What's Included
-
-✅ **13 Database Tables** (PostgreSQL)
-✅ **20+ REST API Endpoints** with level control
-✅ **Device Level Support** (0-100% scale) - ⭐ **Properly defined in models.py**
-✅ **MQTT Integration** (Adafruit IO)
-✅ **Auto-seed** with 100+ test devices + sensors
-✅ **Flask Backend** with SQLAlchemy ORM
+**Status:** ✅ Production Ready | **Version:** 3.1  
+**Last Updated:** May 9, 2026 | **Team:** Bach, NamKZ
 
 ---
 
-## 🚀 Quick Start
+## 📖 Tài Liệu Chính
 
-### 1. Install Dependencies
+Để bắt đầu, chọn một trong các tài liệu dưới:
+
+| Tài Liệu | Mục Đích |
+|---------|---------|
+| **[SETUP.md](./SETUP.md)** 🚀 | **Bắt đầu tại đây!** - Cài đặt & chạy project (15 min) |
+| **[PROJECT_DETAILS.md](./PROJECT_DETAILS.md)** 📋 | Tổng quan chi tiết dự án cho Agent (5 min read) |
+| **[PROJECT_COMPREHENSIVE_SUMMARY.md](./PROJECT_COMPREHENSIVE_SUMMARY.md)** 📚 | Tài liệu hoàn chỉnh: Architecture, 45+ API endpoints, Database |
+
+---
+
+## ✨ Tính năng Chính
+
+✅ **REST API** - 45+ endpoints cho quản lý house/floor/room/device/sensor  
+✅ **Device Control** - On/Off + Level slider (0-100%)  
+✅ **Real-time Sync** - Socket.IO WebSocket updates  
+✅ **MQTT Integration** - Adafruit IO cloud sync  
+✅ **Mobile App** - React Native + Expo (iOS/Android/Web)  
+✅ **Automation Rules** - Multi-condition rules với AND/OR logic  
+✅ **Database** - SQLite + 16 tables (user, house, floor, room, device, sensor, etc.)  
+✅ **Notifications** - Real-time alerts & system notifications  
+
+---
+
+## 🏗️ Cấu trúc Project
+
+```
+New folder/
+├── 🐍 app.py                          # Backend Flask API
+├── 🐍 models.py                       # SQLAlchemy ORM
+├── 🐍 config.py                       # Configuration
+├── 🐍 automation_service.py           # Automation engine
+├── 🐍 notification_service.py         # Notification service
+├── 📄 requirements.txt                # Python dependencies
+│
+├── 📱 mobile/                         # React Native App
+│   ├── 📄 app.config.js              # Expo config
+│   ├── 📄 package.json               # npm dependencies
+│   └── src/
+│       ├── screens/                  # 6 main screens
+│       ├── services/                 # API, Auth, Realtime
+│       └── context/                  # Auth context
+│
+├── 📁 instance/                       # SQLite database
+├── 📁 venv/                          # Python virtual env
+│
+└── 📚 Documentation/
+    ├── SETUP.md                      # Setup & running
+    ├── PROJECT_COMPREHENSIVE_SUMMARY # Full documentation
+    └── README.md                     # This file
+```
+
+---
+
+## ⚡ Quick Start (2 Menit)
+
+### Prerequisites
+- Python 3.9+, Node.js 18+, npm 9+
+
+### Terminal 1 - Backend
 ```bash
-python -m venv venv
+# Activate environment
 .\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
 
-### 2. Setup Database
-```bash
-# PostgreSQL: Create user and database
-psql -U postgres
-CREATE USER smarthome_user WITH PASSWORD 'Smarthome@2024';
-CREATE DATABASE smarthome_db OWNER smarthome_user;
-```
-
-### 3. Seed Data
-```bash
-python seed_database.py
-# Creates: 5 houses, 50+ devices with level, sensors
-```
-
-### 4. Run Backend
-```bash
+# Run backend
 python app.py
-# Backend runs on: http://localhost:8000
+# ✅ Backend runs on http://localhost:8000
+```
+
+### Terminal 2 - Mobile
+```bash
+cd mobile
+npm start
+# ✅ Chọn platform: w (web), a (Android), i (iOS)
+```
+
+### Login
+```
+Username: bach
+Password: password123
 ```
 
 ---
 
-## 🔌 Key Endpoints
+## 🔌 API Examples
 
-### Device Level Control (⭐ NEW)
-
-**Get All Devices with Level:**
+**Get all devices:**
 ```bash
-GET http://localhost:8000/api/devices/status
-```
-Response:
-```json
-{
-  "success": true,
-  "data": [
-    {"id": 1, "name": "Main Light", "type": "light", "status": "on", "level": 75},
-    {"id": 2, "name": "Ceiling Fan", "type": "fan", "status": "on", "level": 50}
-  ]
-}
-```
-
-**Update Device Level:**
-```bash
-POST http://localhost:8000/api/device-status
-Content-Type: application/json
-
-{
-  "device_id": 1,
-  "status": "on",
-  "level": 75
-}
-```
-
-### Core API
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/api/health` | GET | Health check |
-| `/api/houses` | GET/POST | List/create houses |
-| `/api/houses/{id}/floors` | GET | Get floors in house |
-| `/api/floors/{id}/rooms` | GET | Get rooms in floor |
-| `/api/rooms/{id}/devices` | GET | Get devices in room |
-| `/api/room/{id}/sensors` | GET | Get sensors in room |
-| `/api/devices/status` | GET | Get all devices with level |
-| `/api/device-status` | POST | Update device status + level |
-| `/api/sensor-data` | POST | Log sensor reading |
-| `/api/sensor-data/latest` | GET | Get latest sensor data |
-| `/api/sensors/{id}/data` | GET | Get sensor history |
-| `/api/alerts` | GET | Get unread alerts |
-
----
-
-## 📊 Database Schema
-
-**Device Table** (with ✅ Level Column):
-```sql
-CREATE TABLE device (
-    device_id SERIAL PRIMARY KEY,
-    room_id INTEGER NOT NULL,
-    device_name VARCHAR(150),
-    device_type VARCHAR(50),
-    status VARCHAR(20) DEFAULT 'off',
-    level INTEGER DEFAULT 0,              -- ⭐ 0-100%
-    connection_status VARCHAR(20),
-    mac_address VARCHAR(17),
-    created_at TIMESTAMP,
-    updated_at TIMESTAMP
-);
-```
-
----
-
-## 🧪 Test Backend
-
-```bash
-# Health check
-curl http://localhost:8000/api/health
-
-# Get all houses
-curl http://localhost:8000/api/houses
-
-# Get all devices with level
 curl http://localhost:8000/api/devices/status
+```
 
-# Update device level
+**Create house:**
+```bash
+curl -X POST http://localhost:8000/api/houses \
+  -H "Content-Type: application/json" \
+  -d '{"name":"New House","address":"123 Main","city":"City","country":"Country"}'
+```
+
+**Update device level:**
+```bash
 curl -X POST http://localhost:8000/api/device-status \
   -H "Content-Type: application/json" \
-  -d '{"device_id": 1, "status": "on", "level": 75}'
+  -d '{"device_id":1,"status":"on","level":75}'
 ```
+
+👉 Xem [PROJECT_COMPREHENSIVE_SUMMARY.md](./PROJECT_COMPREHENSIVE_SUMMARY.md) để xem đầy đủ 45+ endpoints
 
 ---
 
-## 📁 Project Structure
+## ⚙️ Cấu Hình
 
-```
-Smart Home Backend/
-├── app.py                   # Flask backend (20+ endpoints)
-├── models.py               # 13 SQLAlchemy ORM models ⭐ WITH LEVEL
-├── config.py               # Configuration
-├── .env                     # Environment variables
-├── requirements.txt        # Dependencies
-├── seed_database.py        # Populate test data (100+ devices)
-├── PROJECT_COMPREHENSIVE_SUMMARY.md  # Full documentation
-└── README.md              # This file
-```
+**Backend (`.env`):**
+- `ADAFRUIT_USERNAME` - Adafruit account
+- `ADAFRUIT_KEY` - Adafruit API key
+- `SECRET_KEY` - JWT secret
+
+**Mobile (`.env.local`):**
+- `EXPO_PUBLIC_API_URL` - Backend API URL (localhost, LAN IP, emulator)
+
+👉 Chi tiết: [SETUP.md - Cấu hình môi trường](./SETUP.md#-cấu-hình-môi-trường)
 
 ---
 
-## 🎮 Device Level (0-100%)
+## 📊 Công Nghệ
 
-| Level | Meaning |
-|-------|---------|
-| 0 | OFF |
-| 1-99 | Partial intensity |
-| 100 | Maximum intensity |
-
-**Example:**
-- Light: 0% off, 75% = 75% brightness
-- Fan: 0% off, 50% = 50% speed
-- TV: 100% full power
-
-**Frontend Controller:**
-```javascript
-// Slider: 0-100
-<input type="range" min="0" max="100" 
-       onchange="updateLevel(deviceId, this.value)">
-```
+| Layer | Technology |
+|-------|-----------|
+| **Backend API** | Flask 3.0 + SQLAlchemy 2.0 |
+| **Database** | SQLite (16 tables) |
+| **Real-time** | Socket.IO + WebSocket |
+| **MQTT** | Paho (Adafruit IO) |
+| **Mobile** | React Native + Expo |
+| **Mobile Navigation** | React Navigation 6.x |
+| **Auth** | JWT + AsyncStorage |
 
 ---
 
-## 🔗 Next: Frontend
+## 🚀 Next Steps
 
-After backend is working, create frontend:
-- React, React Native, or Next.js
-- Connects to this Backend API
-- Port 5000 (frontend proxy)
-- Real-time device control with level slider
+1. **Bắt đầu:** Đọc [SETUP.md](./SETUP.md)
+2. **Chi tiết:** Xem [PROJECT_COMPREHENSIVE_SUMMARY.md](./PROJECT_COMPREHENSIVE_SUMMARY.md)
+3. **Contribute:** Clone project & setup theo hướng dẫn
 
 ---
 
-## 📝 Notes
+## 📞 Support
 
-- **Level Column:** Defined in `models.py` → `Device.level = db.Column(db.Integer, default=0)`
-- **Database:** Auto-creates on `app.py` startup
-- **Seeding:** `seed_database.py` creates 5 houses + 100+ devices + sensors
-- **MQTT:** Connects to Adafruit IO (optional)
-- **Error Handling:** All endpoints return proper HTTP codes
+- 🐛 **Bug Report:** Tạo issue trên GitHub
+- 💬 **Questions:** Liên hệ team members
+- 📖 **Documentation:** Xem tài liệu đầy đủ bên dưới
 
 ---
 
-## 🐛 Troubleshooting
-
-**Backend won't start:**
-```bash
-# Check PostgreSQL
-psql -U smarthome_user -d smarthome_db -c "SELECT 1"
-
-# Check .env has DATABASE_URL
-cat .env | grep DATABASE_URL
-```
-
-**Devices not showing level:**
-```bash
-# Check device table
-python -c "from app import app; from models import db, Device; app.app_context().push(); print(Device.query.first().level)"
-```
-
----
-
-**Created:** April 16, 2026  
-**Status:** ✅ OPERATIONAL
+**Made with ❤️ by Smart Home Team**

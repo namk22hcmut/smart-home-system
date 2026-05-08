@@ -2,7 +2,7 @@
  * UserFloorsScreen.js - User Floor Management
  * Allow users to create, edit, delete floors in their house
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,8 @@ import { apiService } from '../services/api';
 
 export default function UserFloorsScreen({ navigation, route }) {
   const { houseId, houseName } = route.params;
+  const isMounted = useRef(true);
+  
   const [floors, setFloors] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -31,25 +33,38 @@ export default function UserFloorsScreen({ navigation, route }) {
     description: '',
   });
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
   // Load floors
   const loadFloors = async (showLoader = true) => {
-    if (showLoader) setLoading(true);
-    setRefreshing(true);
+    if (showLoader && isMounted.current) setLoading(true);
+    if (isMounted.current) setRefreshing(true);
     try {
       const response = await apiService.get(`/houses/${houseId}/floors`);
       console.log('📍 Floors response:', response);
-      if (response && response.success) {
-        setFloors(response.data || []);
-        console.log('✅ Loaded', (response.data || []).length, 'floors');
-      } else {
-        console.warn('❌ Floors not successful:', response);
+      if (isMounted.current) {
+        if (response && response.success) {
+          setFloors(response.data || []);
+          console.log('✅ Loaded', (response.data || []).length, 'floors');
+        } else {
+          console.warn('❌ Floors not successful:', response);
+        }
       }
     } catch (error) {
       console.error('❌ Error loading floors:', error);
-      Alert.alert('Error', 'Failed to load floors');
+      if (isMounted.current) {
+        Alert.alert('Error', 'Failed to load floors');
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (isMounted.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 

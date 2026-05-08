@@ -28,9 +28,9 @@ export default function UserManagement({ navigation }) {
     setRefreshing(true);
     try {
       const response = await apiService.get('/admin/users');
-      if (response.data.success) {
-        setUsers(response.data.data);
-        console.log('✅ Loaded', response.data.data.length, 'users');
+      if (response.success) {
+        setUsers(response.data);
+        console.log('✅ Loaded', response.data.length, 'users');
       }
     } catch (error) {
       console.error('❌ Error loading users:', error);
@@ -69,11 +69,11 @@ export default function UserManagement({ navigation }) {
           reason: 'Disabled by admin',
         });
         console.log('Disable response:', response);
-        if (response.data.success) {
+        if (response.success) {
           Alert.alert('Success', `${username} has been disabled`);
           loadUsers(false);
         } else {
-          Alert.alert('Error', response.data.error || 'Failed to disable user');
+          Alert.alert('Error', response.error || 'Failed to disable user');
         }
       } catch (error) {
         console.error('❌ Disable error:', error);
@@ -89,11 +89,11 @@ export default function UserManagement({ navigation }) {
         console.log(`🟢 Enabling user ${userId}...`);
         const response = await apiService.put(`/admin/users/${userId}/enable`);
         console.log('Enable response:', response);
-        if (response.data.success) {
+        if (response.success) {
           Alert.alert('Success', `${username} has been enabled`);
           loadUsers(false);
         } else {
-          Alert.alert('Error', response.data.error || 'Failed to enable user');
+          Alert.alert('Error', response.error || 'Failed to enable user');
         }
       } catch (error) {
         console.error('❌ Enable error:', error);
@@ -112,11 +112,11 @@ export default function UserManagement({ navigation }) {
           new_role: newRole,
         });
         console.log('Role change response:', response);
-        if (response.data.success) {
+        if (response.success) {
           Alert.alert('Success', `${username} is now a ${newRole}`);
           loadUsers(false);
         } else {
-          Alert.alert('Error', response.data.error || 'Failed to change role');
+          Alert.alert('Error', response.error || 'Failed to change role');
         }
       } catch (error) {
         console.error('❌ Role change error:', error);
@@ -132,11 +132,11 @@ export default function UserManagement({ navigation }) {
         console.log(`🗑️ Deleting user ${userId}...`);
         const response = await apiService.delete(`/admin/users/${userId}/delete`);
         console.log('Delete response:', response);
-        if (response.data.success) {
+        if (response.success) {
           Alert.alert('Success', `${username} has been deleted`);
           loadUsers(false);
         } else {
-          Alert.alert('Error', response.data.error || 'Failed to delete user');
+          Alert.alert('Error', response.error || 'Failed to delete user');
         }
       } catch (error) {
         console.error('❌ Delete error:', error);

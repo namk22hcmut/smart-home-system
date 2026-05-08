@@ -227,6 +227,44 @@ class AdminService:
             return False
     
     @staticmethod
+    def change_access_level(house_id, owner_id, target_user_id, new_access_level):
+        """Change access level for a user on a house"""
+        try:
+            from models import House
+            
+            # Verify house owner
+            house = House.query.get(house_id)
+            if not house or house.user_id != owner_id:
+                logger.warning(f"House {house_id} not owned by user {owner_id}")
+                return False
+            
+            # Check if target user exists
+            target_user = User.query.get(target_user_id)
+            if not target_user:
+                logger.warning(f"Target user {target_user_id} not found")
+                return False
+            
+            # Find and update the access record
+            access = UserHouseAccess.query.filter_by(
+                user_id=target_user_id,
+                house_id=house_id
+            ).first()
+            
+            if not access:
+                logger.warning(f"No access record found for user {target_user_id} on house {house_id}")
+                return False
+            
+            # Update access level
+            access.access_level = AccessLevel[new_access_level.upper()]
+            db.session.commit()
+            logger.info(f"✅ Access level changed: {house.house_name} → {target_user.username} ({new_access_level})")
+            return True
+        except Exception as e:
+            logger.error(f"Error changing access level: {e}")
+            db.session.rollback()
+            return False
+    
+    @staticmethod
     def get_house_users(house_id):
         """Get all users who have access to a house"""
         try:

@@ -2,7 +2,7 @@
  * UserRoomsScreen.js - User Room Management + Sensor Display
  * Allow users to create, edit, delete rooms and view sensors in their floor
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,8 @@ import { apiService } from '../services/api';
 
 export default function UserRoomsScreen({ navigation, route }) {
   const { floorId, floorName } = route.params;
+  const isMounted = useRef(true);
+  
   const [rooms, setRooms] = useState([]);
   const [sensors, setSensors] = useState({});  // Store sensors for each room
   const [selectedRoomId, setSelectedRoomId] = useState(null);  // Track which room's sensors to show
@@ -44,6 +46,13 @@ export default function UserRoomsScreen({ navigation, route }) {
   });
 
   const sensorTypes = ['temperature', 'humidity', 'motion', 'light', 'co2', 'pressure', 'other'];
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   const roomTypes = [
     'bedroom',
@@ -156,18 +165,31 @@ export default function UserRoomsScreen({ navigation, route }) {
 
   // Delete sensor
   const deleteSensor = async (sensorId) => {
-    const confirmed = window.confirm('Delete this sensor?');
-    if (!confirmed) return;
-
-    try {
-      const response = await apiService.delete(`/sensors/${sensorId}`);
-      if (response && response.success) {
-        Alert.alert('Success', 'Sensor deleted!');
-        loadSensors(currentRoomForSensor);
-      }
-    } catch (error) {
-      Alert.alert('Error', error.message || 'Failed to delete sensor');
-    }
+    Alert.alert(
+      'Delete Sensor',
+      'Delete this sensor?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          onPress: async () => {
+            try {
+              const response = await apiService.delete(`/sensors/${sensorId}`);
+              if (response && response.success) {
+                Alert.alert('Success', 'Sensor deleted!');
+                loadSensors(currentRoomForSensor);
+              }
+            } catch (error) {
+              Alert.alert('Error', error.message || 'Failed to delete sensor');
+            }
+          },
+          style: 'destructive',
+        },
+      ]
+    );
   };
 
   // Open sensor modal to add
@@ -255,30 +277,43 @@ export default function UserRoomsScreen({ navigation, route }) {
   const deleteRoom = async (roomId) => {
     console.log('🗑️ Delete button clicked for room:', roomId);
     
-    const confirmed = window.confirm('Delete this room and all its devices?\nThis action cannot be undone');
-    if (!confirmed) {
-      console.log('❌ Delete cancelled');
-      return;
-    }
-
-    try {
-      console.log('📤 Sending DELETE request to /api/rooms/' + roomId);
-      const response = await apiService.delete(`/rooms/${roomId}`);
-      console.log('📄 Delete response:', response);
-      
-      if (response && response.success) {
-        console.log('✅ Room deleted successfully!');
-        Alert.alert('Success', 'Room deleted!');
-        await loadRooms(false);
-      } else {
-        Alert.alert('Error', response?.error || 'Failed to delete');
-      }
-    } catch (error) {
-      console.error('❌ Delete error:', error);
-      const errorMsg = error.response?.data?.error || error.message || 'Failed to delete room';
-      console.error('Error details:', errorMsg);
-      Alert.alert('Error', errorMsg);
-    }
+    Alert.alert(
+      'Delete Room',
+      'Delete this room and all its devices? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          onPress: () => {
+            console.log('❌ Delete cancelled');
+          },
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          onPress: async () => {
+            try {
+              console.log('📤 Sending DELETE request to /api/rooms/' + roomId);
+              const response = await apiService.delete(`/rooms/${roomId}`);
+              console.log('📄 Delete response:', response);
+              
+              if (response && response.success) {
+                console.log('✅ Room deleted successfully!');
+                Alert.alert('Success', 'Room deleted!');
+                await loadRooms(false);
+              } else {
+                Alert.alert('Error', response?.error || 'Failed to delete');
+              }
+            } catch (error) {
+              console.error('❌ Delete error:', error);
+              const errorMsg = error.response?.data?.error || error.message || 'Failed to delete room';
+              console.error('Error details:', errorMsg);
+              Alert.alert('Error', errorMsg);
+            }
+          },
+          style: 'destructive',
+        },
+      ]
+    );
   };
 
   // Open add room modal

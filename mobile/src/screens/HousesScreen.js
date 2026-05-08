@@ -2,7 +2,7 @@
  * UserHousesScreen.js - User House Management
  * Allow users to create, edit, delete their own houses
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,8 @@ import {
 import { apiService } from '../services/api';
 
 export default function UserHousesScreen({ navigation }) {
+  const isMounted = useRef(true);
+  
   const [houses, setHouses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -31,22 +33,35 @@ export default function UserHousesScreen({ navigation }) {
     country: '',
   });
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
   // Load user's houses
   const loadHouses = async (showLoader = true) => {
-    if (showLoader) setLoading(true);
-    setRefreshing(true);
+    if (showLoader && isMounted.current) setLoading(true);
+    if (isMounted.current) setRefreshing(true);
     try {
       const response = await apiService.get('/houses');
-      if (response && response.success) {
-        setHouses(response.data || []);
-        console.log('✅ Loaded', (response.data || []).length, 'houses');
+      if (isMounted.current) {
+        if (response && response.success) {
+          setHouses(response.data || []);
+          console.log('✅ Loaded', (response.data || []).length, 'houses');
+        }
       }
     } catch (error) {
       console.error('❌ Error loading houses:', error);
-      Alert.alert('Error', 'Failed to load houses');
+      if (isMounted.current) {
+        Alert.alert('Error', 'Failed to load houses');
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (isMounted.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
@@ -110,30 +125,43 @@ export default function UserHousesScreen({ navigation }) {
   const deleteHouse = async (houseId) => {
     console.log('🗑️ Delete button clicked for house:', houseId);
     
-    const confirmed = window.confirm('Delete this house and all its data?\nThis action cannot be undone');
-    if (!confirmed) {
-      console.log('❌ Delete cancelled');
-      return;
-    }
-
-    try {
-      console.log('📤 Sending DELETE request to /api/houses/' + houseId);
-      const response = await apiService.delete(`/houses/${houseId}`);
-      console.log('✅ Delete response:', response);
-      
-      if (response && response.success) {
-        console.log('✅ House deleted successfully!');
-        Alert.alert('Success', 'House deleted!');
-        await loadHouses(false);
-      } else {
-        Alert.alert('Error', response?.error || 'Failed to delete');
-      }
-    } catch (error) {
-      console.error('❌ Delete error:', error);
-      const errorMsg = error.response?.data?.error || error.message || 'Failed to delete house';
-      console.error('Error details:', errorMsg);
-      Alert.alert('Error', errorMsg);
-    }
+    Alert.alert(
+      'Delete House',
+      'Delete this house and all its data? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          onPress: () => {
+            console.log('❌ Delete cancelled');
+          },
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          onPress: async () => {
+            try {
+              console.log('📤 Sending DELETE request to /api/houses/' + houseId);
+              const response = await apiService.delete(`/houses/${houseId}`);
+              console.log('✅ Delete response:', response);
+              
+              if (response && response.success) {
+                console.log('✅ House deleted successfully!');
+                Alert.alert('Success', 'House deleted!');
+                await loadHouses(false);
+              } else {
+                Alert.alert('Error', response?.error || 'Failed to delete');
+              }
+            } catch (error) {
+              console.error('❌ Delete error:', error);
+              const errorMsg = error.response?.data?.error || error.message || 'Failed to delete house';
+              console.error('Error details:', errorMsg);
+              Alert.alert('Error', errorMsg);
+            }
+          },
+          style: 'destructive',
+        },
+      ]
+    );
   };
 
   // Open add house modal
