@@ -50,33 +50,15 @@ export default function HomeScreen({ navigation }) {
   // ⚠️ setupSocketIO temporarily disabled - will add in future update with proper token/user handling
 
   const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        {
-          text: 'Cancel',
-          onPress: () => console.log('Logout cancelled'),
-          style: 'cancel',
-        },
-        {
-          text: 'Logout',
-          onPress: async () => {
-            console.log('🚪 User confirmed logout - calling signOut()');
-            try {
-              const result = await signOut();
-              console.log('✅ signOut() completed with result:', result);
-              // AuthContext will automatically update isSignedIn to false
-              // App.js will redirect to login screen
-            } catch (error) {
-              console.error('❌ Logout error:', error);
-              Alert.alert('Error', 'Failed to logout: ' + (error.message || 'Unknown error'));
-            }
-          },
-          style: 'destructive',
-        },
-      ]
-    );
+    try {
+      console.log('🚪 Logging out...');
+
+      await signOut();
+
+      console.log('✅ Logged out successfully');
+    } catch (error) {
+      console.error('❌ Logout error:', error);
+    }
   };
 
   useEffect(() => {
@@ -92,6 +74,12 @@ export default function HomeScreen({ navigation }) {
       navigation.setOptions({
         headerShown: true,
         title: 'Smart Home',
+        headerTitleAlign: 'center',
+        headerTitleStyle: {
+          fontWeight: '700',
+          fontSize: 20,
+          color: '#111827',
+        },
         headerRight: () => (
           <View style={styles.headerButtons}>
             <TouchableOpacity 
@@ -126,6 +114,12 @@ export default function HomeScreen({ navigation }) {
       navigation.setOptions({
         headerShown: true,
         title: 'Smart Home',
+        headerTitleAlign: 'center',
+        headerTitleStyle: {
+          fontWeight: '700',
+          fontSize: 20,
+          color: '#111827',
+        },
         headerStyle: {
           backgroundColor: '#f8f9fa',
         },
@@ -162,15 +156,15 @@ export default function HomeScreen({ navigation }) {
     try {
       setLoading(true);
       // ⚠️ Add small delay to ensure token is ready from AsyncStorage
-      console.log('⏳ Waiting for token to be ready...');
+      console.log('Waiting for token to be ready...');
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      console.log('📍 Fetching houses from API...');
+      console.log('Fetching houses from API...');
       const data = await apiService.getHouses();
-      console.log('✅ Houses loaded successfully:', data.length, 'houses');
+      console.log('Houses loaded successfully:', data.length, 'houses');
       setHouses(data);
     } catch (error) {
-      console.error('❌ Error loading houses:', error.message || error);
+      console.error('Error loading houses:', error.message || error);
     } finally {
       setLoading(false);
     }
@@ -179,14 +173,31 @@ export default function HomeScreen({ navigation }) {
   const renderHouseCard = ({ item }) => (
     <TouchableOpacity
       style={styles.card}
-      onPress={() => navigation.navigate('UserFloors', { 
-        houseId: item.id, 
-        houseName: item.name 
-      })}
+      onPress={() =>
+        navigation.navigate('UserFloors', {
+          houseId: item.id,
+          houseName: item.name
+        })
+      }
+      activeOpacity={0.85}
     >
-      <Text style={styles.cardTitle}>{item.name}</Text>
-      <Text style={styles.cardSubtitle}>{item.address}</Text>
-      <Text style={styles.cardDetail}>{item.floors} Floors</Text>
+      <View style={styles.cardTop}>
+        <View style={styles.houseInfo}>
+          <Text style={styles.cardTitle}>
+            {item.name}
+          </Text>
+
+          <Text style={styles.cardSubtitle}>
+            {item.address}
+          </Text>
+        </View>
+
+        <View style={styles.houseBadge}>
+          <Text style={styles.houseBadgeText}>
+            {item.floors} floors
+          </Text>
+        </View>
+      </View>
     </TouchableOpacity>
   );
 
@@ -200,9 +211,20 @@ export default function HomeScreen({ navigation }) {
           </View>
 
           <View style={styles.features}>
-            <Feature icon="🏠" title="Smart Control" desc="Control all your devices from one place" />
-            <Feature icon="🔔" title="Get Notified" desc="Real-time notifications for your home" />
-            <Feature icon="⚡" title="Save Energy" desc="Track and optimize your energy usage" />
+            <Feature
+              title="Smart Control"
+              desc="Control all your devices from one place"
+            />
+
+            <Feature
+              title="Notifications"
+              desc="Real-time updates from your smart home"
+            />
+
+            <Feature
+              title="Energy Tracking"
+              desc="Monitor and optimize energy usage"
+            />
           </View>
 
           <Text style={styles.footer}>Smart Home © 2026</Text>
@@ -220,26 +242,29 @@ export default function HomeScreen({ navigation }) {
         </View>
       )}
       <View style={styles.headerRow}>
-        <Text style={styles.header}>🏠 My Houses</Text>
+        <Text style={styles.header}>My Houses</Text>
         <View style={styles.headerButtonsRow}>
           <TouchableOpacity 
             style={[styles.manageBtn, !houses.length && styles.disabledBtn]}
             onPress={() => {
               if (houses.length > 0) {
-                navigation.navigate('Dashboard', { house: houses[0] });
+                navigation.navigate('Dashboard', {
+                  houseId: houses[0].id,
+                  houseName: houses[0].name,
+                });
               } else {
                 Alert.alert('No Houses', 'You need at least one house to view the dashboard');
               }
             }}
             disabled={!houses.length}
           >
-            <Text style={styles.manageBtnText}>📊 Dashboard</Text>
+            <Text style={styles.manageBtnText}>Dashboard</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.manageBtn}
             onPress={() => navigation.navigate('Houses')}
           >
-            <Text style={styles.manageBtnText}>⚙️ Manage</Text>
+            <Text style={styles.manageBtnText}>Manage</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -258,13 +283,19 @@ export default function HomeScreen({ navigation }) {
   );
 }
 
-function Feature({ icon, title, desc }) {
+function Feature({ title, desc }) {
   return (
     <View style={styles.featureItem}>
-      <Text style={styles.featureIcon}>{icon}</Text>
+      <View style={styles.featureDot} />
+
       <View style={{ flex: 1 }}>
-        <Text style={styles.featureTitle}>{title}</Text>
-        <Text style={styles.featureDesc}>{desc}</Text>
+        <Text style={styles.featureTitle}>
+          {title}
+        </Text>
+
+        <Text style={styles.featureDesc}>
+          {desc}
+        </Text>
       </View>
     </View>
   );
@@ -273,193 +304,282 @@ function Feature({ icon, title, desc }) {
 const styles = StyleSheet.create({
   welcomeContainer: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
-    justifyContent: 'space-between',
+    backgroundColor: '#f4f5f7',
   },
+
   welcomeContent: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingVertical: 40,
+    paddingVertical: 48,
     justifyContent: 'space-between',
   },
+
   welcomeHeader: {
-    marginTop: 20,
+    marginTop: 40,
   },
+
   welcomeSubtitle: {
-    fontSize: 16,
-    color: '#666',
-    fontWeight: '500',
-    marginBottom: 40,
+    fontSize: 28,
+    color: '#111827',
+    fontWeight: '700',
+    lineHeight: 38,
   },
+
   features: {
     marginVertical: 20,
   },
+
   featureItem: {
     flexDirection: 'row',
     marginBottom: 24,
     alignItems: 'flex-start',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 18,
+
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
+    elevation: 2,
   },
-  featureIcon: {
-    fontSize: 32,
-    marginRight: 16,
+
+  featureDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: '#111827',
+    marginRight: 14,
+    marginTop: 6,
   },
+
   featureTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: '700',
+    color: '#111827',
     marginBottom: 4,
   },
+
   featureDesc: {
     fontSize: 14,
-    color: '#666',
+    color: '#6b7280',
     lineHeight: 20,
   },
+
   footer: {
     textAlign: 'center',
-    color: '#999',
+    color: '#9ca3af',
     fontSize: 12,
+    marginBottom: 10,
   },
+
   headerButtons: {
     flexDirection: 'row',
-    gap: 8,
     marginRight: 16,
     alignItems: 'center',
   },
+
   headerLoginBtn: {
-    backgroundColor: '#007AFF',
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    backgroundColor: '#111827',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginRight: 8,
   },
+
   headerLoginText: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
   },
+
   headerSignupBtn: {
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: '#007AFF',
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
+
   headerSignupText: {
-    color: '#007AFF',
-    fontSize: 12,
+    color: '#111827',
+    fontSize: 13,
     fontWeight: '600',
   },
+
   container: {
     flex: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     paddingTop: 10,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f4f5f7',
   },
+
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+
   logoutButton: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 8,
   },
+
   logoutText: {
-    color: '#007AFF',
+    color: '#111827',
     fontSize: 14,
     fontWeight: '600',
   },
+
   notifButton: {
-    marginRight: 8,
+    marginRight: 10,
     paddingHorizontal: 10,
     paddingVertical: 8,
     position: 'relative',
   },
+
   notifButtonText: {
-    fontSize: 18,
+    fontSize: 16,
+    color: '#111827',
   },
+
   badge: {
     position: 'absolute',
     top: 0,
     right: 0,
-    backgroundColor: '#d32f2f',
+    backgroundColor: '#dc2626',
     borderRadius: 10,
-    minWidth: 20,
-    height: 20,
+    minWidth: 18,
+    height: 18,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 4,
   },
+
   badgeText: {
     color: '#fff',
     fontSize: 10,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
+
   userInfo: {
-    backgroundColor: '#e3f2fd',
-    borderRadius: 8,
-    padding: 12,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
     marginVertical: 12,
+
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
+    elevation: 2,
   },
+
   welcomeText: {
-    color: '#007AFF',
-    fontSize: 14,
-    fontWeight: '500',
+    color: '#111827',
+    fontSize: 15,
+    fontWeight: '600',
   },
+
   header: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 30,
+    fontWeight: '700',
+    color: '#111827',
     flex: 1,
   },
+
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginVertical: 8,
+    marginVertical: 10,
   },
+
   headerButtonsRow: {
     flexDirection: 'row',
-    gap: 8,
   },
+
   manageBtn: {
-    backgroundColor: '#ff6b6b',
+    backgroundColor: '#111827',
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginLeft: 8,
   },
+
   disabledBtn: {
-    backgroundColor: '#ccc',
-    opacity: 0.6,
+    backgroundColor: '#d1d5db',
   },
+
   manageBtnText: {
-    color: 'white',
-    fontSize: 14,
+    color: '#fff',
+    fontSize: 13,
     fontWeight: '600',
   },
+
   card: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 20,
+    padding: 18,
     marginVertical: 8,
-    elevation: 3,
+
     shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
+    elevation: 2,
   },
-  cardTitle: {
-    fontSize: 18,
+
+  cardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+
+  houseInfo: {
+    flex: 1,
+    paddingRight: 12,
+  },
+
+  houseBadge: {
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+
+  houseBadgeText: {
+    color: '#111827',
+    fontSize: 12,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
   },
+
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 6,
+  },
+
   cardSubtitle: {
     fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
+    color: '#6b7280',
+    lineHeight: 20,
   },
+
   cardDetail: {
     fontSize: 12,
-    color: '#999',
+    color: '#9ca3af',
   },
 });

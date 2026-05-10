@@ -96,22 +96,35 @@ const DashboardScreen = ({ navigation }) => {
       const response = await apiService.get('/houses');
       console.log('🏠 Houses response:', response);
       
-      if (response.success && response.houses) {
-        setHouses(response.houses);
+      if (response.success && response.data) {
+        // Map backend data to match expected format
+        const housesData = response.data.map(h => ({
+          house_id: h.id,
+          name: h.name,
+          house_name: h.name,
+          address: h.address,
+          floors: h.floors
+        }));
+        
+        setHouses(housesData);
+        console.log('✅ Loaded houses:', housesData.length);
         
         // Set initial house
         let initialSelected = initialHouse;
-        if (!initialSelected && response.houses.length > 0) {
-          initialSelected = response.houses[0];
+        if (!initialSelected && housesData.length > 0) {
+          initialSelected = housesData[0];
         }
         
         if (initialSelected) {
           setSelectedHouse(initialSelected);
         }
+      } else {
+        console.warn('⚠️ No houses in response:', response);
+        Alert.alert('No Houses', 'You don\'t have any houses yet. Create one first.');
       }
     } catch (error) {
       console.error('❌ Error loading houses:', error);
-      Alert.alert('Error', 'Failed to load houses');
+      Alert.alert('Error', 'Failed to load houses: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -245,7 +258,7 @@ const DashboardScreen = ({ navigation }) => {
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>📍 Select House</Text>
+            <Text style={styles.modalTitle}>Select House</Text>
             <TouchableOpacity onPress={() => setShowHouseSelector(false)}>
               <MaterialIcons name="close" size={24} color="#333" />
             </TouchableOpacity>
@@ -288,7 +301,7 @@ const DashboardScreen = ({ navigation }) => {
       <View style={styles.modalOverlay}>
         <View style={[styles.modalContent, { maxHeight: '80%' }]}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>⚙️ Filters & Sort</Text>
+            <Text style={styles.modalTitle}>Filters & Sort</Text>
             <TouchableOpacity onPress={() => setShowFilters(false)}>
               <MaterialIcons name="close" size={24} color="#333" />
             </TouchableOpacity>
@@ -360,7 +373,7 @@ const DashboardScreen = ({ navigation }) => {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#4CAF50" />
+        <ActivityIndicator size="large" color="#111827" />
       </View>
     );
   }
@@ -385,13 +398,13 @@ const DashboardScreen = ({ navigation }) => {
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>📊 Dashboard</Text>
+              <Text style={styles.headerTitle}>Dashboard</Text>
               <TouchableOpacity 
                 style={styles.houseSelectorButton}
                 onPress={() => setShowHouseSelector(true)}
               >
                 <Text style={styles.houseSelectorText}>
-                  🏠 {selectedHouse?.name || selectedHouse?.house_name || 'Select House'}
+                  {selectedHouse?.name || selectedHouse?.house_name || 'Select House'}
                 </Text>
                 <MaterialIcons name="expand-more" size={20} color="#fff" />
               </TouchableOpacity>
@@ -411,7 +424,7 @@ const DashboardScreen = ({ navigation }) => {
           <>
             {/* Devices Stats */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>🔌 Device Statistics</Text>
+              <Text style={styles.sectionTitle}>Device Statistics</Text>
 
               <View style={styles.statsGrid}>
                 <StatCard
@@ -444,7 +457,7 @@ const DashboardScreen = ({ navigation }) => {
             {/* Activity Distribution Chart */}
             {sensorChartData && sensorChartData.datasets[0].data.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>📈 Activity Distribution</Text>
+                <Text style={styles.sectionTitle}>Activity Distribution</Text>
                 <View style={styles.chartContainer}>
                   <BarChart
                     data={sensorChartData}
@@ -465,7 +478,7 @@ const DashboardScreen = ({ navigation }) => {
 
             {/* Infrastructure Stats */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>🏠 Infrastructure</Text>
+              <Text style={styles.sectionTitle}>Infrastructure</Text>
 
               <View style={styles.statsGrid}>
                 <StatCard
@@ -497,7 +510,7 @@ const DashboardScreen = ({ navigation }) => {
 
             {/* Automation Status */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>🤖 Automation Rules</Text>
+              <Text style={styles.sectionTitle}>Automation Rules</Text>
 
               <View style={styles.statusContainer}>
                 <View style={styles.statusRow}>
@@ -524,7 +537,7 @@ const DashboardScreen = ({ navigation }) => {
             {/* Recent Activities with Filter Info */}
             <View style={styles.section}>
               <View style={styles.activityHeader}>
-                <Text style={styles.sectionTitle}>📝 Recent Activities</Text>
+                <Text style={styles.sectionTitle}>Recent Activities</Text>
                 <Text style={styles.filterInfo}>
                   {activities.length} {filterType !== 'all' ? '- ' + filterType.replace('_', ' ') : 'total'}
                 </Text>
@@ -582,11 +595,11 @@ const ActivityItem = ({ activity }) => {
   const getActionIcon = (action) => {
     switch (action) {
       case 'turn_on':
-        return '✓ On';
+        return 'On';
       case 'turn_off':
-        return '✗ Off';
+        return 'Off';
       case 'set_level':
-        return '⚡ Level';
+        return 'Level';
       default:
         return action;
     }
@@ -627,286 +640,389 @@ const ActivityItem = ({ activity }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f4f5f7',
   },
+
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#f4f5f7',
   },
+
   header: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    paddingTop: 30,
+    backgroundColor: '#111827',
+    paddingHorizontal: 24,
+    paddingTop: 60,
+    paddingBottom: 28,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
   },
+
   headerTop: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
+
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 34,
+    fontWeight: '700',
     color: '#fff',
+    marginBottom: 14,
   },
+
   houseSelectorButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+
+    backgroundColor: '#1f2937',
+
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+
+    borderRadius: 14,
   },
+
   houseSelectorText: {
-    fontSize: 14,
     color: '#fff',
-    marginRight: 4,
+    fontSize: 14,
+    fontWeight: '600',
+    marginRight: 6,
   },
+
   filterButton: {
-    padding: 8,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 8,
-    marginLeft: 8,
-  },
-  
-  // Modals
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: '90%',
-    paddingBottom: 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+
+    backgroundColor: '#1f2937',
+
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+
+  section: {
+    marginHorizontal: 18,
+    marginTop: 22,
   },
-  
-  // House Selector
-  houseOption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  houseOptionSelected: {
-    backgroundColor: '#F0F7F0',
-  },
-  houseOptionText: {
-    fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
-  },
-  
-  // Filters
-  filterScroll: {
-    paddingHorizontal: 16,
-  },
-  filterGroup: {
-    marginTop: 16,
+
+  sectionTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#111827',
     marginBottom: 16,
   },
-  filterLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
-  },
-  filterOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-  },
-  filterOptionText: {
-    fontSize: 14,
-    color: '#333',
-  },
-  filterOptionActive: {
-    backgroundColor: '#E8F5E9',
-    borderColor: '#4CAF50',
-  },
-  
-  // Chart
-  chartContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 8,
-    elevation: 2,
-    alignItems: 'center',
-  },
-  chart: {
-    borderRadius: 8,
-  },
-  
-  // Sections
-  section: {
-    marginHorizontal: 16,
-    marginVertical: 12,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
-  },
-  activityHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  filterInfo: {
-    fontSize: 12,
-    color: '#999',
-    fontStyle: 'italic',
-  },
-  
-  // Stats
+
   statsGrid: {
-    display: 'flex',
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
+
   statCard: {
     width: '48%',
+
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    elevation: 2,
+
+    borderRadius: 22,
+
+    padding: 20,
+
+    marginBottom: 14,
+
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
+    elevation: 2,
   },
+
   statCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 16,
   },
+
   statCardTitle: {
-    fontSize: 12,
-    color: '#666',
-    marginLeft: 6,
+    fontSize: 13,
+    color: '#6b7280',
+    marginLeft: 10,
     flex: 1,
+    fontWeight: '500',
   },
+
   statCardValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 30,
+    fontWeight: '700',
+    color: '#111827',
   },
-  
-  // Status
-  statusContainer: {
+
+  chartContainer: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+
+    borderRadius: 24,
+
+    paddingVertical: 18,
+
+    alignItems: 'center',
+
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
     elevation: 2,
   },
+
+  chart: {
+    borderRadius: 18,
+  },
+
+  statusContainer: {
+    backgroundColor: '#fff',
+
+    borderRadius: 24,
+
+    padding: 22,
+
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
+    elevation: 2,
+  },
+
   statusRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+
+    marginBottom: 14,
   },
+
   statusLabel: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 15,
+    color: '#6b7280',
     fontWeight: '500',
   },
+
   statusValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
   },
+
   progressBar: {
-    backgroundColor: '#E0E0E0',
-    borderRadius: 4,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 999,
     overflow: 'hidden',
   },
+
   progressFill: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#111827',
     height: 8,
+    borderRadius: 999,
   },
-  
-  // Activity
+
+  activityHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+
+    marginBottom: 12,
+  },
+
+  filterInfo: {
+    fontSize: 13,
+    color: '#9ca3af',
+  },
+
   activityItem: {
     backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
+
+    borderRadius: 18,
+
+    padding: 18,
+
+    marginBottom: 12,
+
     flexDirection: 'row',
     alignItems: 'center',
+
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
     elevation: 1,
   },
+
   activityLeft: {
-    flex: 1,
-    marginRight: 12,
+    width: 75,
   },
+
   activityTime: {
     fontSize: 12,
-    color: '#999',
+    color: '#9ca3af',
+    fontWeight: '500',
   },
+
   activityMiddle: {
-    marginRight: 12,
+    marginRight: 14,
   },
+
   activityAction: {
+    backgroundColor: '#f3f4f6',
+
+    color: '#111827',
+
     fontSize: 12,
-    fontWeight: '600',
-    color: '#4CAF50',
-    backgroundColor: '#E8F5E9',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
+    fontWeight: '700',
+
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+
+    borderRadius: 999,
+
+    overflow: 'hidden',
   },
+
   activityRight: {
-    flex: 2,
+    flex: 1,
   },
+
   activityReason: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: 14,
+    color: '#4b5563',
+    lineHeight: 20,
   },
-  
-  // Footer
+
   footer: {
-    padding: 16,
+    paddingVertical: 28,
+    paddingBottom: 40,
     alignItems: 'center',
-    marginBottom: 20,
   },
+
   footerText: {
     fontSize: 12,
-    color: '#999',
+    color: '#9ca3af',
     marginBottom: 4,
   },
-  
+
   emptyText: {
+    fontSize: 15,
+    color: '#6b7280',
     textAlign: 'center',
-    color: '#999',
+    lineHeight: 22,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+  },
+
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: '90%',
+    paddingBottom: 24,
+  },
+
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+
+    paddingHorizontal: 22,
+    paddingVertical: 22,
+
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#111827',
+  },
+
+  houseOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+
+    paddingHorizontal: 22,
+    paddingVertical: 18,
+
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+
+  houseOptionSelected: {
+    backgroundColor: '#f9fafb',
+  },
+
+  houseOptionText: {
+    fontSize: 15,
+    color: '#111827',
+    fontWeight: '600',
+  },
+
+  filterScroll: {
+    paddingHorizontal: 22,
+  },
+
+  filterGroup: {
+    marginTop: 18,
+  },
+
+  filterLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 12,
+  },
+
+  filterOption: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+
+    backgroundColor: '#fff',
+
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+
+    borderRadius: 14,
+
+    marginBottom: 10,
+  },
+
+  filterOptionActive: {
+    backgroundColor: '#111827',
+    borderColor: '#111827',
+  },
+
+  filterOptionText: {
     fontSize: 14,
-    paddingVertical: 20,
+    color: '#111827',
+    fontWeight: '600',
   },
 });
 

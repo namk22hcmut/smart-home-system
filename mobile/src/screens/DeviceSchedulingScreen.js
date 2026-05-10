@@ -196,7 +196,7 @@ const DeviceSchedulingScreen = ({ navigation }) => {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#FF9800" />
+        <ActivityIndicator size="large" color="#111827" />
       </View>
     );
   }
@@ -204,7 +204,7 @@ const DeviceSchedulingScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>⏰ Device Schedule</Text>
+        <Text style={styles.headerTitle}>Device Schedule</Text>
         <Text style={styles.headerSubtitle}>{device?.device_name || device?.name || 'Device Scheduling'}</Text>
       </View>
 
@@ -225,7 +225,7 @@ const DeviceSchedulingScreen = ({ navigation }) => {
           ))
         ) : (
           <View style={styles.emptyContainer}>
-            <MaterialIcons name="schedule" size={48} color="#CCC" />
+            <View style={styles.emptyCircle} />
             <Text style={styles.emptyText}>No schedules set</Text>
             <Text style={styles.emptySubtext}>
               Create a schedule to automate your device
@@ -272,7 +272,7 @@ const DeviceSchedulingScreen = ({ navigation }) => {
 
             <ScrollView style={styles.modalContent}>
               {/* Time Input */}
-              <Text style={styles.fieldLabel}>Scheduled Time ⏰</Text>
+              <Text style={styles.fieldLabel}>Scheduled Time </Text>
               <TextInput
                 style={styles.input}
                 placeholder="HH:MM"
@@ -284,7 +284,7 @@ const DeviceSchedulingScreen = ({ navigation }) => {
               />
 
               {/* Action Status */}
-              <Text style={styles.fieldLabel}>Action 🎛️</Text>
+              <Text style={styles.fieldLabel}>Action </Text>
               <View style={styles.statusButtons}>
                 <TouchableOpacity
                   style={[
@@ -346,7 +346,7 @@ const DeviceSchedulingScreen = ({ navigation }) => {
               )}
 
               {/* Days of Week */}
-              <Text style={styles.fieldLabel}>Repeat On 📅</Text>
+              <Text style={styles.fieldLabel}>Repeat On </Text>
               <View style={styles.daysGrid}>
                 {DAYS_OF_WEEK.map((day, index) => (
                   <TouchableOpacity
@@ -408,13 +408,13 @@ const ScheduleCard = ({ schedule, onEdit, onDelete }) => {
         <View>
           <Text style={styles.scheduleTime}>{schedule.scheduled_time}</Text>
           <Text style={styles.scheduleAction}>
-            {schedule.action_status === 'on' ? '✓ Turn ON' : '✗ Turn OFF'}
+            {schedule.action_status === 'on' ? 'Turn ON' : 'Turn OFF'}
             {schedule.action_status === 'on' && ` @ ${schedule.action_level}%`}
           </Text>
         </View>
         <View style={styles.scheduleActions}>
           <TouchableOpacity onPress={onEdit} style={styles.actionButton}>
-            <MaterialIcons name="edit" size={20} color="#FF9800" />
+            <MaterialIcons name="edit" size={20} color="#111827" />
           </TouchableOpacity>
           <TouchableOpacity onPress={onDelete} style={styles.actionButton}>
             <MaterialIcons name="delete" size={20} color="#F44336" />
@@ -429,213 +429,295 @@ const ScheduleCard = ({ schedule, onEdit, onDelete }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f4f5f7',
   },
+
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+
   header: {
-    backgroundColor: '#FF9800',
-    paddingHorizontal: 16,
-    paddingVertical: 20,
-    paddingTop: 30,
+    backgroundColor: '#111827',
+    paddingHorizontal: 24,
+    paddingTop: 60,
+    paddingBottom: 28,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
   },
+
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 32,
+    fontWeight: '700',
     color: '#fff',
+    marginBottom: 8,
   },
+
   headerSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    marginTop: 4,
+    fontSize: 15,
+    color: '#d1d5db',
   },
+
   content: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
+    paddingTop: 20,
   },
+
   scheduleCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    elevation: 2,
+    borderRadius: 22,
+    padding: 20,
+    marginBottom: 14,
+
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
+    elevation: 2,
   },
+
   scheduleCardTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    alignItems: 'flex-start',
+    marginBottom: 10,
   },
+
   scheduleTime: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FF9800',
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#111827',
   },
+
   scheduleAction: {
     fontSize: 14,
-    color: '#666',
-    marginTop: 4,
+    color: '#6b7280',
+    marginTop: 6,
+    lineHeight: 20,
   },
+
   scheduleActions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
   },
+
   actionButton: {
-    padding: 8,
+    backgroundColor: '#f3f4f6',
+    padding: 10,
+    borderRadius: 12,
   },
+
   scheduleDays: {
-    fontSize: 12,
-    color: '#999',
+    fontSize: 13,
+    color: '#9ca3af',
     marginTop: 8,
+    lineHeight: 20,
   },
+
   emptyContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 60,
+    paddingVertical: 80,
   },
+
+  emptyCircle: {
+    width: 70,
+    height: 70,
+    borderRadius: 999,
+    backgroundColor: '#e5e7eb',
+    marginBottom: 18,
+  },
+
   emptyText: {
-    fontSize: 16,
-    color: '#999',
-    marginTop: 12,
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
   },
+
   emptySubtext: {
-    fontSize: 12,
-    color: '#CCC',
-    marginTop: 4,
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 22,
   },
+
   fab: {
     position: 'absolute',
-    bottom: 20,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#FF9800',
+    right: 24,
+    bottom: 24,
+
+    width: 60,
+    height: 60,
+    borderRadius: 999,
+
+    backgroundColor: '#111827',
+
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 8,
+
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+
+    elevation: 6,
   },
+
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'flex-end',
   },
+
   modal: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     maxHeight: '90%',
   },
+
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+
+    paddingHorizontal: 22,
+    paddingVertical: 22,
+
     borderBottomWidth: 1,
-    borderBottomColor: '#EEE',
+    borderBottomColor: '#f3f4f6',
   },
+
   modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#111827',
   },
+
   modalContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingHorizontal: 22,
+    paddingTop: 12,
   },
+
   fieldLabel: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-    marginTop: 12,
+    color: '#111827',
+    marginBottom: 10,
+    marginTop: 18,
   },
+
   input: {
     borderWidth: 1,
-    borderColor: '#DDD',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    marginBottom: 12,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+
+    borderRadius: 14,
+
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+
+    fontSize: 15,
+    color: '#111827',
   },
+
   statusButtons: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 12,
   },
+
   statusButton: {
     flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#FF9800',
+    borderColor: '#d1d5db',
+
+    borderRadius: 14,
+
+    paddingVertical: 14,
     alignItems: 'center',
+
+    backgroundColor: '#fff',
   },
+
   statusButtonActive: {
-    backgroundColor: '#FF9800',
+    backgroundColor: '#111827',
+    borderColor: '#111827',
   },
+
   statusButtonText: {
+    color: '#111827',
+    fontWeight: '600',
     fontSize: 14,
-    fontWeight: '500',
-    color: '#FF9800',
   },
+
   statusButtonTextActive: {
     color: '#fff',
   },
+
   slider: {
     width: '100%',
     height: 40,
+    marginTop: 8,
     marginBottom: 12,
   },
+
   daysGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginBottom: 12,
+    gap: 10,
+    marginTop: 4,
   },
+
   dayButton: {
-    width: '30%',
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+
+    borderRadius: 12,
+
     borderWidth: 1,
-    borderColor: '#FF9800',
-    alignItems: 'center',
+    borderColor: '#d1d5db',
+
+    backgroundColor: '#fff',
   },
+
   dayButtonActive: {
-    backgroundColor: '#FF9800',
+    backgroundColor: '#111827',
+    borderColor: '#111827',
   },
+
   dayButtonText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#FF9800',
+    color: '#111827',
+    fontWeight: '600',
+    fontSize: 13,
   },
+
   dayButtonTextActive: {
     color: '#fff',
   },
+
   saveButton: {
-    backgroundColor: '#FF9800',
-    borderRadius: 8,
-    paddingVertical: 14,
+    backgroundColor: '#111827',
+    borderRadius: 16,
+    paddingVertical: 16,
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 20,
+    marginTop: 28,
+    marginBottom: 30,
   },
+
   saveButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
     color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });
 

@@ -25,9 +25,9 @@ export default function ActivityLogs({ navigation }) {
     setRefreshing(true);
     try {
       const response = await apiService.get('/admin/activity-logs?limit=100');
-      if (response.data.success) {
-        setLogs(response.data.data);
-        console.log('✅ Loaded', response.data.data.length, 'activity logs');
+      if (response.success) {
+        setLogs(response.data);
+        console.log('✅ Loaded', response.data.length, 'activity logs');
       }
     } catch (error) {
       console.error('❌ Error loading logs:', error);
@@ -45,12 +45,12 @@ export default function ActivityLogs({ navigation }) {
   // Get action icon and color
   const getActionStyle = (action) => {
     const actions = {
-      user_disabled: { icon: '🔴', color: '#e74c3c' },
-      user_enabled: { icon: '🟢', color: '#2ecc71' },
-      user_role_changed: { icon: '🔑', color: '#3498db' },
-      user_deleted: { icon: '🗑️', color: '#e67e22' },
-      house_shared: { icon: '🏠', color: '#9b59b6' },
-      stats_viewed: { icon: '📊', color: '#1abc9c' },
+      user_disabled: { icon: '●', color: '#dc2626' },
+      user_enabled: { icon: '●', color: '#16a34a' },
+      user_role_changed: { icon: '●', color: '#2563eb' },
+      user_deleted: { icon: '●', color: '#ea580c' },
+      house_shared: { icon: '●', color: '#7c3aed' },
+      stats_viewed: { icon: '●', color: '#0891b2' },
     };
     return actions[action] || { icon: '📋', color: '#7f8c8d' };
   };
@@ -139,96 +139,139 @@ function DetailRow({ label, value }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ecf0f1',
+    backgroundColor: '#f4f5f7',
   },
+
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+
   listContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 30,
   },
+
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#7f8c8d',
+    color: '#6b7280',
   },
+
   emptyText: {
-    fontSize: 16,
-    color: '#95a5a6',
+    fontSize: 15,
+    color: '#9ca3af',
   },
+
   logCard: {
     backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#3498db',
+
+    borderRadius: 18,
+
+    padding: 18,
+
+    marginBottom: 14,
+
+    shadowColor: '#000',
+    shadowOpacity: 0.025,
+    shadowRadius: 4,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
     elevation: 2,
   },
+
   logHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 8,
+
+    marginBottom: 10,
   },
+
   actionIcon: {
-    fontSize: 20,
-    marginRight: 10,
+    fontSize: 16,
+    marginRight: 12,
+    marginTop: 1,
   },
+
   logInfo: {
     flex: 1,
+    paddingRight: 12,
   },
+
   action: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#2c3e50',
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+    textTransform: 'capitalize',
   },
+
   username: {
-    fontSize: 12,
-    color: '#7f8c8d',
+    fontSize: 13,
+    color: '#6b7280',
     marginTop: 4,
   },
+
   statusBadge: {
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 4,
+    paddingVertical: 5,
+
+    borderRadius: 999,
   },
+
   statusText: {
     fontSize: 11,
     fontWeight: '600',
+    textTransform: 'capitalize',
   },
+
   timestamp: {
-    fontSize: 11,
-    color: '#95a5a6',
-    marginBottom: 8,
-  },
-  description: {
     fontSize: 12,
-    color: '#7f8c8d',
-    fontStyle: 'italic',
+    color: '#9ca3af',
+
+    marginBottom: 10,
   },
+
+  description: {
+    fontSize: 13,
+    color: '#4b5563',
+    lineHeight: 20,
+  },
+
   expandedDetails: {
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: 14,
+    paddingTop: 14,
+
     borderTopWidth: 1,
-    borderTopColor: '#ecf0f1',
+    borderTopColor: '#f3f4f6',
   },
+
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 6,
+    alignItems: 'center',
+
+    paddingVertical: 7,
   },
+
   detailLabel: {
-    fontSize: 11,
-    color: '#7f8c8d',
+    fontSize: 12,
+    color: '#6b7280',
     fontWeight: '600',
   },
+
   detailValue: {
-    fontSize: 11,
-    color: '#2c3e50',
+    fontSize: 12,
+    color: '#111827',
+
     flex: 1,
+
     textAlign: 'right',
+
+    marginLeft: 20,
   },
 });

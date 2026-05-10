@@ -2,7 +2,7 @@
  * UserFloorsScreen.js - User Floor Management
  * Allow users to create, edit, delete floors in their house
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,12 @@ import { apiService } from '../services/api';
 
 export default function UserFloorsScreen({ navigation, route }) {
   const { houseId, houseName } = route.params;
+  const isMounted = useRef(true);
+    useEffect(() => {
+      return () => {
+        isMounted.current = false;
+      };
+    }, []);
   const [floors, setFloors] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -33,23 +39,43 @@ export default function UserFloorsScreen({ navigation, route }) {
 
   // Load floors
   const loadFloors = async (showLoader = true) => {
-    if (showLoader) setLoading(true);
-    setRefreshing(true);
+    if (showLoader && isMounted.current) {
+      setLoading(true);
+    }
+
+    if (isMounted.current) {
+      setRefreshing(true);
+    }
+
     try {
-      const response = await apiService.get(`/houses/${houseId}/floors`);
-      console.log('📍 Floors response:', response);
-      if (response && response.success) {
+      const response = await apiService.get(
+        `/houses/${houseId}/floors`
+      );
+
+      if (
+        response &&
+        response.success &&
+        isMounted.current
+      ) {
         setFloors(response.data || []);
-        console.log('✅ Loaded', (response.data || []).length, 'floors');
-      } else {
-        console.warn('❌ Floors not successful:', response);
       }
     } catch (error) {
-      console.error('❌ Error loading floors:', error);
-      Alert.alert('Error', 'Failed to load floors');
+      console.error(
+        'Error loading floors:',
+        error
+      );
+
+      if (isMounted.current) {
+        Alert.alert(
+          'Error',
+          'Failed to load floors'
+        );
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (isMounted.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
@@ -59,7 +85,7 @@ export default function UserFloorsScreen({ navigation, route }) {
     
     // Strict validation
     if (!formData.floor_name || !formData.floor_name.trim()) {
-      Alert.alert('Error', '❌ Please enter a floor name');
+      Alert.alert('Error', 'Please enter a floor name');
       return;
     }
 
@@ -91,7 +117,7 @@ export default function UserFloorsScreen({ navigation, route }) {
     }
 
     try {
-      const response = await apiService.put(`/floors/${editingFloor.id}`, {
+      const response = await apiService.put(`/floors/${editingFloor.id || editingFloor.floor_id}`, {
         floor_name: formData.floor_name,
         floor_number: formData.floor_number ? parseInt(formData.floor_number) : null,
         description: formData.description,
@@ -143,11 +169,21 @@ export default function UserFloorsScreen({ navigation, route }) {
   // Open edit floor modal
   const openEditModal = (floor) => {
     setEditingFloor(floor);
+
     setFormData({
-      floor_name: floor.name,
-      floor_number: floor.floor_number ? floor.floor_number.toString() : '',
-      description: floor.description || '',
+      floor_name:
+        floor.name || floor.floor_name || '',
+
+      floor_number:
+        floor.floor_number !== null &&
+        floor.floor_number !== undefined
+          ? floor.floor_number.toString()
+          : '',
+
+      description:
+        floor.description || '',
     });
+
     setModalVisible(true);
   };
 
@@ -167,41 +203,70 @@ export default function UserFloorsScreen({ navigation, route }) {
   const renderFloorItem = ({ item }) => (
     <TouchableOpacity
       style={styles.floorCard}
-      onPress={() => navigation.navigate('UserRooms', { floorId: item.id, floorName: item.name })}
+      activeOpacity={0.85}
+      onPress={() =>
+        navigation.navigate('UserRooms', {
+          floorId: item.id,
+          floorName: item.name
+        })
+      }
     >
       <View style={styles.floorHeader}>
         <View style={styles.floorInfo}>
-          <Text style={styles.floorName}>📍 {item.name}</Text>
+          <Text style={styles.floorName}>
+            {item.name}
+          </Text>
+
           {item.floor_number !== null && (
-            <Text style={styles.floorNumber}>Level {item.floor_number}</Text>
+            <Text style={styles.floorNumber}>
+              Level {item.floor_number}
+            </Text>
           )}
         </View>
+
         <View style={styles.floorActions}>
           <TouchableOpacity
             style={styles.editBtn}
             onPress={() => openEditModal(item)}
           >
-            <Text style={styles.editBtnText}>✎</Text>
+            <Text style={styles.editBtnText}>
+              Edit
+            </Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.deleteBtn}
             onPress={() => deleteFloor(item.id)}
           >
-            <Text style={styles.deleteBtnText}>🗑</Text>
+            <Text style={styles.deleteBtnText}>
+              Delete
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
+
       {item.description && (
-        <Text style={styles.floorDescription}>{item.description}</Text>
+        <Text style={styles.floorDescription}>
+          {item.description}
+        </Text>
       )}
-      <Text style={styles.roomsCount}>🚪 {item.rooms} rooms</Text>
+
+      <View style={styles.floorFooter}>
+        <Text style={styles.roomsCount}>
+          {item.rooms} rooms
+        </Text>
+
+        <Text style={styles.viewText}>
+          View rooms
+        </Text>
+      </View>
     </TouchableOpacity>
   );
 
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#e74c3c" />
+        <ActivityIndicator size="large" color="#111827" />
         <Text style={styles.loadingText}>Loading floors...</Text>
       </View>
     );
@@ -211,7 +276,12 @@ export default function UserFloorsScreen({ navigation, route }) {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerText}>🏠 {houseName}</Text>
+        {/* Header */}
+        <View style={styles.pageHeader}>
+          <Text style={styles.pageTitle}>
+            {houseName}
+          </Text>
+        </View>
       </View>
 
       {/* Add Floor Button */}
@@ -240,7 +310,7 @@ export default function UserFloorsScreen({ navigation, route }) {
           <ScrollView style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {editingFloor ? '✏️ Edit Floor' : '📍 New Floor'}
+                {editingFloor ? 'Edit Floor' : 'New Floor'}
               </Text>
               <TouchableOpacity onPress={resetForm}>
                 <Text style={styles.closeBtn}>✕</Text>
@@ -303,192 +373,268 @@ export default function UserFloorsScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f4f5f7',
   },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
+
+  emptyContainer: {
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 80,
   },
+
   loadingText: {
     marginTop: 10,
     fontSize: 14,
-    color: '#666',
+    color: '#6b7280',
   },
-  header: {
-    backgroundColor: '#e74c3c',
-    padding: 15,
-    alignItems: 'center',
-  },
-  headerText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
+
   addBtn: {
-    backgroundColor: '#27ae60',
-    margin: 15,
-    padding: 15,
-    borderRadius: 8,
+    backgroundColor: '#111827',
+
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 20,
+
+    paddingVertical: 14,
+
+    borderRadius: 16,
+
     alignItems: 'center',
-  },
-  addBtnText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  listContent: {
-    paddingHorizontal: 15,
-    paddingBottom: 20,
-  },
-  floorCard: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    padding: 15,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#3498db',
+
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
     elevation: 2,
   },
+
+  addBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 30,
+  },
+
+  floorCard: {
+    backgroundColor: '#fff',
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 16,
+    overflow: 'hidden',
+
+    shadowColor: '#000',
+    shadowOpacity: 0.035,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
+    elevation: 2,
+  },
+
   floorHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    alignItems: 'flex-start',
+    marginBottom: 10,
   },
+
   floorInfo: {
     flex: 1,
+    paddingRight: 12,
   },
+
   floorName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
   },
+
   floorNumber: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 2,
+    fontSize: 13,
+    color: '#6b7280',
+    marginTop: 4,
   },
+
   floorActions: {
     flexDirection: 'row',
-    gap: 10,
+    alignItems: 'center',
   },
+
   editBtn: {
-    backgroundColor: '#3498db',
-    padding: 8,
-    borderRadius: 4,
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    marginRight: 8,
   },
+
   editBtnText: {
-    color: 'white',
-    fontSize: 16,
+    color: '#111827',
+    fontSize: 13,
+    fontWeight: '600',
   },
+
   deleteBtn: {
-    backgroundColor: '#e74c3c',
-    padding: 8,
-    borderRadius: 4,
+    backgroundColor: '#fee2e2',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
+
   deleteBtnText: {
-    color: 'white',
-    fontSize: 16,
+    color: '#dc2626',
+    fontSize: 13,
+    fontWeight: '600',
   },
+
   floorDescription: {
     fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
+    color: '#6b7280',
+    lineHeight: 20,
+    marginBottom: 14,
   },
-  roomsCount: {
-    fontSize: 12,
-    color: '#999',
-  },
-  emptyContainer: {
+
+  floorFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 60,
   },
+
+  roomsCount: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+
+  viewText: {
+    fontSize: 13,
+    color: '#111827',
+    fontWeight: '600',
+  },
+
   emptyText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#666',
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#374151',
   },
+
   emptySubtext: {
     fontSize: 14,
-    color: '#999',
+    color: '#9ca3af',
     marginTop: 8,
   },
 
-  // Modal styles
   modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'flex-end',
   },
+
   modalContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: '80%',
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 22,
+    paddingTop: 22,
+    maxHeight: '85%',
   },
+
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
   },
+
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
   },
+
   closeBtn: {
     fontSize: 24,
-    color: '#999',
+    color: '#9ca3af',
   },
+
   formContainer: {
     marginBottom: 30,
   },
+
   label: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 6,
-    marginTop: 12,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+    marginTop: 14,
   },
+
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
-    padding: 12,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 14,
     fontSize: 14,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: '#f9fafb',
+    color: '#111827',
   },
+
   descriptionInput: {
     textAlignVertical: 'top',
   },
+
   buttonGroup: {
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 25,
+    marginTop: 28,
   },
+
   btn: {
     flex: 1,
-    padding: 14,
-    borderRadius: 6,
+    paddingVertical: 14,
+    borderRadius: 12,
     alignItems: 'center',
   },
+
   saveBtn: {
-    backgroundColor: '#27ae60',
+    backgroundColor: '#111827',
+    marginRight: 8,
   },
+
   saveBtnText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
+
   cancelBtn: {
-    backgroundColor: '#ecf0f1',
+    backgroundColor: '#f3f4f6',
+    marginLeft: 8,
   },
+
   cancelBtnText: {
-    color: '#333',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: '#111827',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  pageHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 8,
+  },
+
+  pageTitle: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#111827',
   },
 });

@@ -120,7 +120,7 @@ export const apiService = {
   getAllDevices: async () => {
     try {
       const response = await apiClient.get('/devices/status');
-      return response.data.devices || [];
+      return response.data.data || [];
     } catch (error) {
       console.error('Error fetching devices status:', error);
       throw error;

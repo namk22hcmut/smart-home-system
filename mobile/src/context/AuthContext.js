@@ -50,31 +50,6 @@ export const AuthProvider = ({ children }) => {
     checkAuth();
   }, [checkAuth]);
 
-  // Monitor token changes every 100ms (faster detection)
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        const token = await storage.getItem('authToken');
-        const userData = await storage.getItem('user');
-        const authenticated = !!token;
-        setIsSignedIn(prev => {
-          if (prev !== authenticated) {
-            console.log(`🔄 Auth state changed to: ${authenticated ? 'signed in' : 'signed out'}`);
-          }
-          return authenticated;
-        });
-        if (userData) {
-          setUser(JSON.parse(userData));
-        } else {
-          setUser(null);
-        }
-      } catch (error) {
-        console.error('Error in auth monitor:', error);
-      }
-    }, 100); // Check every 100ms instead of 300ms
-
-    return () => clearInterval(interval);
-  }, []);
 
   const authContext = {
     isLoading,
@@ -135,30 +110,19 @@ export const AuthProvider = ({ children }) => {
     signOut: async () => {
       console.log('🚪 Starting logout...');
       try {
-        // 1. Clear storage immediately
-        console.log('🗑️ Clearing authToken from storage...');
         await storage.removeItem('authToken');
         await storage.removeItem('user');
-        
-        // 2. Verify token is gone
-        const tokenAfterClear = await storage.getItem('authToken');
-        console.log(`🔍 Token after clear: ${tokenAfterClear ? 'STILL EXISTS' : '✅ CLEARED'}`);
-        
-        // 3. Update state IMMEDIATELY - don't wait
-        console.log('📱 Setting isSignedIn=false');
+
         setIsSignedIn(false);
         setUser(null);
-        
-        // 4. Wait a bit for React to flush state updates
-        await new Promise(resolve => setTimeout(resolve, 100));
-        console.log('✅ Logout complete - App should show login screen now');
-        
+
         return true;
       } catch (error) {
         console.error('❌ Logout error:', error);
-        // Force state update even on error
+
         setIsSignedIn(false);
         setUser(null);
+
         return false;
       }
     },

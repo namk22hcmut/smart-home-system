@@ -72,7 +72,7 @@ const NotificationItem = React.memo(({
       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       activeOpacity={0.5}
     >
-      <Text style={styles.deleteButtonText}>✕</Text>
+      <Text style={styles.deleteButtonText}>Delete</Text>
     </TouchableOpacity>
   </View>
 ));
@@ -139,25 +139,7 @@ const NotificationCenter = ({ navigation }) => {
     console.log(`[NotificationCenter] Notifications count: ${notifications.length}`);
   }, [notifications]);
 
-  // Set header options
-  useEffect(() => {
-    navigation.setOptions({
-      headerTitle: `Notifications ${unreadCount > 0 ? `(${unreadCount})` : ''}`,
-      headerTintColor: '#007AFF',
-      headerTitleStyle: {
-        fontWeight: '600',
-        fontSize: 18,
-      },
-      headerRight: () => (
-        <TouchableOpacity
-          onPress={() => handleClearAll()}
-          style={{ paddingRight: 15 }}
-        >
-          <Text style={{ color: '#007AFF', fontSize: 12 }}>Clear All</Text>
-        </TouchableOpacity>
-      ),
-    });
-  }, [navigation, unreadCount, handleClearAll]);
+  
 
   // Helper: Check if action is debounced
   const isActionDebounced = (notificationId, actionType) => {
@@ -206,49 +188,50 @@ const NotificationCenter = ({ navigation }) => {
 
   // Delete notification
   const handleDelete = useCallback(async (notificationId) => {
-    // Prevent duplicate rapid calls
     if (isActionDebounced(notificationId, 'delete')) {
       return;
     }
-    
-    Alert.alert(
-      'Delete Notification',
-      'Are you sure you want to delete this notification?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const response = await apiService.delete(`/notifications/${notificationId}`);
-              
-              if (response && response.success) {
-                // Remove from local state
-                setNotifications((prev) => {
-                  const notification = prev.find(n => n.notification_id === notificationId);
-                  const updated = prev.filter((n) => n.notification_id !== notificationId);
-                  
-                  // Update unread count if notification was unread
-                  if (notification && !notification.is_read) {
-                    setUnreadCount((count) => Math.max(0, count - 1));
-                  }
-                  
-                  return updated;
-                });
-                Alert.alert('Success', 'Notification deleted');
-              } else {
-                console.error('[NotificationCenter] Delete failed:', response?.error);
-                Alert.alert('Error', response?.error || 'Failed to delete notification');
-              }
-            } catch (error) {
-              console.error('[NotificationCenter] Delete request failed:', error);
-              Alert.alert('Delete Failed', error.message || 'An error occurred while deleting');
-            }
-          },
-        },
-      ]
-    );
+
+    try {
+      const response = await apiService.delete(
+        `/notifications/${notificationId}`
+      );
+
+      if (response && response.success) {
+        setNotifications((prev) => {
+          const notification = prev.find(
+            n => n.notification_id === notificationId
+          );
+
+          const updated = prev.filter(
+            n => n.notification_id !== notificationId
+          );
+
+          if (notification && !notification.is_read) {
+            setUnreadCount((count) =>
+              Math.max(0, count - 1)
+            );
+          }
+
+          return updated;
+        });
+      } else {
+        Alert.alert(
+          'Error',
+          response?.error || 'Failed to delete notification'
+        );
+      }
+    } catch (error) {
+      console.error(
+        '[NotificationCenter] Delete request failed:',
+        error
+      );
+
+      Alert.alert(
+        'Delete Failed',
+        error.message || 'Failed to delete notification'
+      );
+    }
   }, []);
 
   // Clear all notifications
@@ -279,6 +262,26 @@ const NotificationCenter = ({ navigation }) => {
     );
   }, []);
 
+  // Set header options
+  useEffect(() => {
+      navigation.setOptions({
+        headerTitle: `Notifications ${unreadCount > 0 ? `(${unreadCount})` : ''}`,
+        headerTintColor: '#007AFF',
+        headerTitleStyle: {
+          fontWeight: '600',
+          fontSize: 18,
+        },
+        headerRight: () => (
+          <TouchableOpacity
+            onPress={() => handleClearAll()}
+            style={{ paddingRight: 15 }}
+          >
+            <Text style={{ color: '#007AFF', fontSize: 12 }}>Clear All</Text>
+          </TouchableOpacity>
+        ),
+      });
+    }, [navigation, unreadCount, handleClearAll]);
+
   // Pull to refresh
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -289,13 +292,16 @@ const NotificationCenter = ({ navigation }) => {
   const getNotificationIcon = (type) => {
     switch (type) {
       case 'device_change':
-        return '🔌';
+        return 'Device';
+
       case 'threshold_alert':
-        return '⚠️';
+        return 'Alert';
+
       case 'automation_trigger':
-        return '🔄';
+        return 'Automation';
+
       default:
-        return '🔔';
+        return 'Notification';
     }
   };
 
@@ -320,7 +326,7 @@ const NotificationCenter = ({ navigation }) => {
   if (!loading && notifications.length === 0) {
     return (
       <View style={styles.emptyContainer}>
-        <Text style={styles.emptyIcon}>🔔</Text>
+        <View style={styles.emptyCircle} />
         <Text style={styles.emptyTitle}>No Notifications</Text>
         <Text style={styles.emptyMessage}>
           You're all caught up! Notifications will appear here.
@@ -376,142 +382,176 @@ const NotificationCenter = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: '#f4f5f7',
   },
+
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+
   loadingText: {
-    marginTop: 10,
+    marginTop: 14,
     fontSize: 14,
-    color: '#666',
+    color: '#6b7280',
   },
+
   listContent: {
-    padding: 10,
-    paddingBottom: 20,
+    padding: 16,
+    paddingBottom: 30,
   },
+
   emptyListContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 80,
   },
-  notificationItemContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    marginVertical: 6,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  notificationBorder: {
-    width: 4,
-    backgroundColor: '#ddd',
-    borderTopLeftRadius: 8,
-    borderBottomLeftRadius: 8,
-  },
-  unreadNotification: {
-    backgroundColor: '#f0f8ff',
-  },
-  unreadNotification_border: {
-    backgroundColor: '#007AFF',
-  },
-  notificationContentArea: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-  },
-  notificationContent: {
-    flex: 1,
-  },
-  notificationTouchable: {
-    flex: 1,
-  },
-  notificationHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  notificationIcon: {
-    fontSize: 20,
-    marginRight: 8,
-  },
-  notificationTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    flex: 1,
-  },
-  notificationTime: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 2,
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#007AFF',
-    marginLeft: 8,
-  },
-  notificationMessage: {
-    fontSize: 13,
-    color: '#666',
-    lineHeight: 18,
-    marginLeft: 28,
-  },
-  deleteButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#ffebee',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-    marginRight: 8,
-    flexShrink: 0,
-  },
-  deleteButtonText: {
-    fontSize: 20,
-    color: '#d32f2f',
-    fontWeight: 'bold',
-  },
+
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
   },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: 16,
+
+  emptyCircle: {
+    width: 70,
+    height: 70,
+    borderRadius: 999,
+    backgroundColor: '#e5e7eb',
+    marginBottom: 18,
   },
+
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
     marginBottom: 8,
   },
+
   emptyMessage: {
     fontSize: 14,
-    color: '#999',
+    color: '#6b7280',
     textAlign: 'center',
-    marginBottom: 24,
+    lineHeight: 22,
+    marginBottom: 26,
   },
+
   refreshButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 6,
+    backgroundColor: '#111827',
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 12,
   },
+
   refreshButtonText: {
     color: '#fff',
     fontSize: 14,
+    fontWeight: '600',
+  },
+
+  notificationItemContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    marginBottom: 14,
+    overflow: 'hidden',
+
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
+    elevation: 2,
+  },
+
+  unreadNotification: {
+    backgroundColor: '#fcfcfc',
+  },
+
+  notificationBorder: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    backgroundColor: '#d1d5db',
+  },
+
+  notificationContentArea: {
+    flex: 1,
+    padding: 18,
+    paddingRight: 70,
+  },
+
+  notificationContent: {
+    flex: 1,
+  },
+
+  notificationHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+
+  notificationIcon: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#111827',
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    overflow: 'hidden',
+    marginRight: 10,
+  },
+
+  notificationTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
+  },
+
+  notificationTime: {
+    fontSize: 12,
+    color: '#9ca3af',
+  },
+
+  unreadDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: '#111827',
+    marginLeft: 10,
+    marginTop: 4,
+  },
+
+  notificationMessage: {
+    fontSize: 14,
+    color: '#4b5563',
+    lineHeight: 22,
+    marginTop: 6,
+  },
+
+  deleteButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+
+    backgroundColor: '#f3f4f6',
+    borderRadius: 10,
+
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+
+  deleteButtonText: {
+    fontSize: 12,
+    color: '#dc2626',
     fontWeight: '600',
   },
 });

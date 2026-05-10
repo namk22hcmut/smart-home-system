@@ -2,7 +2,7 @@
  * UserHousesScreen.js - User House Management
  * Allow users to create, edit, delete their own houses
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,8 @@ import {
 import { apiService } from '../services/api';
 
 export default function UserHousesScreen({ navigation }) {
+  const isMounted = useRef(true);
+  
   const [houses, setHouses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -31,22 +33,35 @@ export default function UserHousesScreen({ navigation }) {
     country: '',
   });
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
   // Load user's houses
   const loadHouses = async (showLoader = true) => {
-    if (showLoader) setLoading(true);
-    setRefreshing(true);
+    if (showLoader && isMounted.current) setLoading(true);
+    if (isMounted.current) setRefreshing(true);
     try {
       const response = await apiService.get('/houses');
-      if (response && response.success) {
-        setHouses(response.data || []);
-        console.log('✅ Loaded', (response.data || []).length, 'houses');
+      if (isMounted.current) {
+        if (response && response.success) {
+          setHouses(response.data || []);
+          console.log('✅ Loaded', (response.data || []).length, 'houses');
+        }
       }
     } catch (error) {
       console.error('❌ Error loading houses:', error);
-      Alert.alert('Error', 'Failed to load houses');
+      if (isMounted.current) {
+        Alert.alert('Error', 'Failed to load houses');
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (isMounted.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
@@ -110,30 +125,43 @@ export default function UserHousesScreen({ navigation }) {
   const deleteHouse = async (houseId) => {
     console.log('🗑️ Delete button clicked for house:', houseId);
     
-    const confirmed = window.confirm('Delete this house and all its data?\nThis action cannot be undone');
-    if (!confirmed) {
-      console.log('❌ Delete cancelled');
-      return;
-    }
-
-    try {
-      console.log('📤 Sending DELETE request to /api/houses/' + houseId);
-      const response = await apiService.delete(`/houses/${houseId}`);
-      console.log('✅ Delete response:', response);
-      
-      if (response && response.success) {
-        console.log('✅ House deleted successfully!');
-        Alert.alert('Success', 'House deleted!');
-        await loadHouses(false);
-      } else {
-        Alert.alert('Error', response?.error || 'Failed to delete');
-      }
-    } catch (error) {
-      console.error('❌ Delete error:', error);
-      const errorMsg = error.response?.data?.error || error.message || 'Failed to delete house';
-      console.error('Error details:', errorMsg);
-      Alert.alert('Error', errorMsg);
-    }
+    Alert.alert(
+      'Delete House',
+      'Delete this house and all its data? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          onPress: () => {
+            console.log('❌ Delete cancelled');
+          },
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          onPress: async () => {
+            try {
+              console.log('📤 Sending DELETE request to /api/houses/' + houseId);
+              const response = await apiService.delete(`/houses/${houseId}`);
+              console.log('✅ Delete response:', response);
+              
+              if (response && response.success) {
+                console.log('✅ House deleted successfully!');
+                Alert.alert('Success', 'House deleted!');
+                await loadHouses(false);
+              } else {
+                Alert.alert('Error', response?.error || 'Failed to delete');
+              }
+            } catch (error) {
+              console.error('❌ Delete error:', error);
+              const errorMsg = error.response?.data?.error || error.message || 'Failed to delete house';
+              console.error('Error details:', errorMsg);
+              Alert.alert('Error', errorMsg);
+            }
+          },
+          style: 'destructive',
+        },
+      ]
+    );
   };
 
   // Open add house modal
@@ -172,34 +200,55 @@ export default function UserHousesScreen({ navigation }) {
   const renderHouseItem = ({ item }) => (
     <TouchableOpacity
       style={styles.houseCard}
-      onPress={() => navigation.navigate('UserFloors', { houseId: item.id, houseName: item.name })}
+      onPress={() =>
+        navigation.navigate('UserFloors', {
+          houseId: item.id,
+          houseName: item.name,
+        })
+      }
     >
       <View style={styles.houseHeader}>
-        <Text style={styles.houseName}>🏠 {item.name}</Text>
+        <Text style={styles.houseName}>
+          {item.name}
+        </Text>
+
         <View style={styles.houseActions}>
           <TouchableOpacity
             style={styles.editBtn}
             onPress={() => openEditModal(item)}
           >
-            <Text style={styles.editBtnText}>✎</Text>
+            <Text style={styles.editBtnText}>
+              Edit
+            </Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.deleteBtn}
             onPress={() => deleteHouse(item.id)}
           >
-            <Text style={styles.deleteBtnText}>🗑</Text>
+            <Text style={styles.deleteBtnText}>
+              Delete
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
-      <Text style={styles.houseAddress}>{item.address || 'No address'}</Text>
-      {item.city && <Text style={styles.houseCity}>{item.city}, {item.country}</Text>}
+
+      <Text style={styles.houseAddress}>
+        {item.address || 'No address'}
+      </Text>
+
+      {item.city && (
+        <Text style={styles.houseCity}>
+          {item.city}, {item.country}
+        </Text>
+      )}
     </TouchableOpacity>
   );
 
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#e74c3c" />
+        <ActivityIndicator size="large" color="#111827" />
         <Text style={styles.loadingText}>Loading houses...</Text>
       </View>
     );
@@ -233,7 +282,7 @@ export default function UserHousesScreen({ navigation }) {
           <ScrollView style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {editingHouse ? '✏️ Edit House' : '🏠 New House'}
+                {editingHouse ? 'Edit House' : 'New House'}
               </Text>
               <TouchableOpacity onPress={resetForm}>
                 <Text style={styles.closeBtn}>✕</Text>
@@ -300,172 +349,255 @@ export default function UserHousesScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f4f5f7',
   },
+
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+
   loadingText: {
     marginTop: 10,
     fontSize: 14,
-    color: '#666',
+    color: '#6b7280',
   },
+
   addBtn: {
-    backgroundColor: '#27ae60',
-    margin: 15,
-    padding: 15,
-    borderRadius: 8,
+    backgroundColor: '#111827',
+
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 20,
+
+    paddingVertical: 14,
+
+    borderRadius: 16,
+
     alignItems: 'center',
-  },
-  addBtnText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  listContent: {
-    paddingHorizontal: 15,
-    paddingBottom: 20,
-  },
-  houseCard: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    padding: 15,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#e74c3c',
+
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
     elevation: 2,
   },
+
+  addBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 30,
+  },
+
+  houseCard: {
+    backgroundColor: '#fff',
+
+    borderRadius: 22,
+
+    padding: 18,
+
+    marginBottom: 16,
+
+    overflow: 'hidden',
+
+    shadowColor: '#000',
+    shadowOpacity: 0.035,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
+    elevation: 2,
+  },
+
   houseHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
+
   houseName: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '700',
     flex: 1,
-    color: '#333',
+    color: '#111827',
+    marginRight: 12,
   },
+
   houseActions: {
     flexDirection: 'row',
-    gap: 10,
+    alignItems: 'center',
   },
+
   editBtn: {
-    backgroundColor: '#3498db',
-    padding: 8,
-    borderRadius: 4,
+    backgroundColor: '#f3f4f6',
+
+    minWidth: 64,
+
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+
+    borderRadius: 10,
+
+    marginRight: 8,
+
+    justifyContent: 'center',
+    alignItems: 'center',
   },
+
   editBtnText: {
-    color: 'white',
-    fontSize: 16,
+    color: '#111827',
+    fontSize: 14,
+    fontWeight: '600',
   },
+
   deleteBtn: {
-    backgroundColor: '#e74c3c',
-    padding: 8,
-    borderRadius: 4,
+    backgroundColor: '#fee2e2',
+
+    minWidth: 72,
+
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+
+    borderRadius: 10,
+
+    justifyContent: 'center',
+    alignItems: 'center',
   },
+
   deleteBtnText: {
-    color: 'white',
-    fontSize: 16,
+    color: '#dc2626',
+    fontSize: 14,
+    fontWeight: '600',
   },
+
   houseAddress: {
     fontSize: 14,
-    color: '#666',
+    color: '#6b7280',
     marginBottom: 4,
+    lineHeight: 20,
   },
+
   houseCity: {
-    fontSize: 12,
-    color: '#999',
+    fontSize: 13,
+    color: '#9ca3af',
   },
+
   emptyContainer: {
     alignItems: 'center',
-    paddingTop: 60,
+    justifyContent: 'center',
+    paddingTop: 120,
   },
+
   emptyText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#666',
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#374151',
   },
+
   emptySubtext: {
     fontSize: 14,
-    color: '#999',
+    color: '#9ca3af',
     marginTop: 8,
   },
 
-  // Modal styles
   modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'flex-end',
   },
+
   modalContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: '80%',
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 22,
+    paddingTop: 22,
+    maxHeight: '85%',
   },
+
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
   },
+
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#111827',
   },
+
   closeBtn: {
     fontSize: 24,
-    color: '#999',
+    color: '#9ca3af',
   },
+
   formContainer: {
     marginBottom: 30,
   },
+
   label: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 6,
-    marginTop: 12,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+    marginTop: 14,
   },
+
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
-    padding: 12,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 14,
     fontSize: 14,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: '#f9fafb',
+    color: '#111827',
   },
+
   buttonGroup: {
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 25,
+    marginTop: 28,
   },
+
   btn: {
     flex: 1,
-    padding: 14,
-    borderRadius: 6,
+    paddingVertical: 14,
+    borderRadius: 12,
     alignItems: 'center',
   },
+
   saveBtn: {
-    backgroundColor: '#27ae60',
+    backgroundColor: '#111827',
+    marginRight: 8,
   },
+
   saveBtnText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
+
   cancelBtn: {
-    backgroundColor: '#ecf0f1',
+    backgroundColor: '#f3f4f6',
+    marginLeft: 8,
   },
+
   cancelBtnText: {
-    color: '#333',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: '#111827',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

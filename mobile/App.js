@@ -43,11 +43,11 @@ function UserStack() {
       screenOptions={{
         headerShown: true,
         headerStyle: {
-          backgroundColor: '#f5f5f5',
+          backgroundColor: '#ffffff',
         },
-        headerTintColor: '#007AFF',
+        headerTintColor: '#111827',
         headerTitleStyle: {
-          fontWeight: 'bold',
+          fontWeight: '700',
         },
       }}
     >
@@ -138,11 +138,11 @@ function AdminStack() {
       screenOptions={{
         headerShown: true,
         headerStyle: {
-          backgroundColor: '#2c3e50',
+          backgroundColor: '#ffffff',
         },
-        headerTintColor: '#fff',
+        headerTintColor: '#111827',
         headerTitleStyle: {
-          fontWeight: 'bold',
+          fontWeight: '700',
         },
       }}
     >
@@ -217,11 +217,11 @@ function MainStack() {
       screenOptions={{
         headerShown: true,
         headerStyle: {
-          backgroundColor: '#f5f5f5',
+          backgroundColor: '#ffffff',
         },
-        headerTintColor: '#007AFF',
+        headerTintColor: '#111827',
         headerTitleStyle: {
-          fontWeight: 'bold',
+          fontWeight: '700',
         },
       }}
     >
@@ -293,7 +293,9 @@ function AppContent() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer
+      key={isSignedIn ? 'user' : 'guest'}
+    >
       {!isSignedIn ? (
         <AuthStack />
       ) : user?.role === 'admin' ? (

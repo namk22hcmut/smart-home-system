@@ -11,12 +11,14 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+
 import { AuthContext } from '../context/AuthContext';
 
 export default function LoginScreen({ navigation }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
   const { signIn } = useContext(AuthContext);
 
   const handleLogin = async () => {
@@ -26,16 +28,23 @@ export default function LoginScreen({ navigation }) {
     }
 
     setLoading(true);
+
     try {
       const response = await signIn(username, password);
+
       if (response.success) {
-        Alert.alert('Success', 'Login successful!');
-        // Navigation will be handled automatically by App.js when isSignedIn changes
+        // Navigation handled automatically
       } else {
-        Alert.alert('Login Failed', response.error || 'Invalid credentials');
+        Alert.alert(
+          'Login Failed',
+          response.error || 'Invalid credentials'
+        );
       }
     } catch (error) {
-      Alert.alert('Error', error.message || 'Login failed');
+      Alert.alert(
+        'Error',
+        error.message || 'Login failed'
+      );
     } finally {
       setLoading(false);
     }
@@ -43,46 +52,73 @@ export default function LoginScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.title}>Smart Home</Text>
-        <Text style={styles.subtitle}>Login</Text>
+      <View style={styles.content}>
+        <View style={styles.header}>
+          <Text style={styles.title}>
+            Smart Home
+          </Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Username"
-          placeholderTextColor="#999"
-          value={username}
-          onChangeText={setUsername}
-          editable={!loading}
-        />
+          <Text style={styles.subtitle}>
+            Control your home from anywhere
+          </Text>
+        </View>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#999"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-          editable={!loading}
-        />
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>
+            Login
+          </Text>
 
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleLogin}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Login</Text>
-          )}
-        </TouchableOpacity>
+          <TextInput
+            style={styles.input}
+            placeholder="Username"
+            placeholderTextColor="#9ca3af"
+            value={username}
+            onChangeText={setUsername}
+            editable={!loading}
+          />
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Don't have an account? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Signup')} disabled={loading}>
-            <Text style={styles.linkText}>Sign up</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            placeholderTextColor="#9ca3af"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+            editable={!loading}
+          />
+
+          <TouchableOpacity
+            style={[
+              styles.button,
+              loading && styles.buttonDisabled
+            ]}
+            onPress={handleLogin}
+            disabled={loading}
+            activeOpacity={0.85}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>
+                Login
+              </Text>
+            )}
           </TouchableOpacity>
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              Don't have an account?
+            </Text>
+
+            <TouchableOpacity
+              onPress={() => navigation.push('Signup')}
+              disabled={loading}
+            >
+              <Text style={styles.linkText}>
+                Sign up
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </View>
@@ -92,71 +128,104 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#f4f5f7',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    padding: 20,
-  },
-  card: {
-    width: '100%',
-    backgroundColor: '#fff',
-    borderRadius: 12,
     padding: 24,
+  },
+
+  content: {
+    width: '100%',
+    maxWidth: 420,
+  },
+
+  header: {
+    marginBottom: 28,
+  },
+
+  title: {
+    fontSize: 40,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+
+  subtitle: {
+    fontSize: 15,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 24,
+
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+
     elevation: 3,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#007AFF',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
+
+  cardTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#111827',
     marginBottom: 24,
-    textAlign: 'center',
   },
+
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
+    borderColor: '#e5e7eb',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     marginBottom: 16,
-    fontSize: 16,
-    backgroundColor: '#fafafa',
+    fontSize: 15,
+    backgroundColor: '#f9fafb',
+    color: '#111827',
   },
+
   button: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-    padding: 14,
-    marginTop: 8,
+    backgroundColor: '#111827',
+    borderRadius: 14,
+    paddingVertical: 15,
     alignItems: 'center',
+    marginTop: 8,
   },
+
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: 0.7,
   },
+
   buttonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '600',
   },
+
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 20,
+    marginTop: 24,
   },
+
   footerText: {
-    color: '#666',
+    color: '#6b7280',
     fontSize: 14,
   },
+
   linkText: {
-    color: '#007AFF',
+    color: '#111827',
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    marginLeft: 6,
   },
 });

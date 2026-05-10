@@ -109,7 +109,7 @@ const AutomationRulesScreen = ({ route, navigation }) => {
       const MAX_CONDITIONS = 5;
       const currentConditions = formData.conditions || [];
       if (currentConditions.length >= MAX_CONDITIONS) {
-        Alert.alert('⚠️ Limit Reached', `Maximum ${MAX_CONDITIONS} conditions allowed`);
+        Alert.alert('Limit Reached', `Maximum ${MAX_CONDITIONS} conditions allowed`);
         return;
       }
       console.log('➕ Adding new condition');
@@ -363,8 +363,8 @@ const AutomationRulesScreen = ({ route, navigation }) => {
         <View style={styles.actionSection}>
           <Text style={styles.sectionLabel}>Action:</Text>
           <Text style={styles.actionText}>
-            🎯 Turn {rule.action_device_id ? `${actionDevice?.device_name || actionDevice?.name || 'Device'}` : 'Device'} {(rule.action_status || 'unknown').toUpperCase()}
-            {rule.action_status === 'on' && ` (Level: ${rule.action_level}%)`}
+            Turn {rule.action_device_id ? `${actionDevice?.device_name || actionDevice?.name || 'Device'}` : 'Device'} {(rule.action_status || 'unknown').toUpperCase()}
+            {rule.action_status === 'on' && ` (${rule.action_level}%)`}
           </Text>
         </View>
 
@@ -374,13 +374,13 @@ const AutomationRulesScreen = ({ route, navigation }) => {
             style={[styles.button, styles.testButton]}
             onPress={() => handleTestRule(rule.rule_id)}
           >
-            <Text style={styles.buttonText}>🧪 Test</Text>
+            <Text style={styles.buttonText}>Test</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.button, styles.deleteButton]}
             onPress={() => handleDeleteRule(rule.rule_id, rule.rule_name)}
           >
-            <Text style={styles.buttonText}>🗑️ Delete</Text>
+            <Text style={styles.buttonText}>Delete</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -449,7 +449,7 @@ const AutomationRulesScreen = ({ route, navigation }) => {
             style={styles.removeButton}
             onPress={() => removeCondition(index)}
           >
-            <Text style={styles.removeButtonText}>✕</Text>
+            <Text style={styles.removeButtonText}>Remove</Text>
           </TouchableOpacity>
         </View>
       );
@@ -475,6 +475,8 @@ const AutomationRulesScreen = ({ route, navigation }) => {
     <View style={styles.container}>
       <FlatList
         data={rules}
+        extraData={showAddForm}
+        contentContainerStyle={{ paddingBottom: 140 }}
         renderItem={({ item }) => <RuleCard rule={item} />}
         keyExtractor={(item) => (item?.rule_id || '').toString()}
         refreshControl={
@@ -488,7 +490,7 @@ const AutomationRulesScreen = ({ route, navigation }) => {
         }
         ListFooterComponent={
           showAddForm ? (
-            <ScrollView style={styles.formContainer}>
+            <View style={styles.formContainer}>
               <Text style={styles.formTitle}>Create New Rule</Text>
 
               {/* Rule Name */}
@@ -591,7 +593,7 @@ const AutomationRulesScreen = ({ route, navigation }) => {
                 style={[styles.button, styles.createButton]}
                 onPress={handleCreateRule}
               >
-                <Text style={styles.buttonText}>✓ Create Rule</Text>
+                <Text style={styles.buttonText}>Create Rule</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -603,7 +605,7 @@ const AutomationRulesScreen = ({ route, navigation }) => {
               >
                 <Text style={styles.buttonText}>Cancel</Text>
               </TouchableOpacity>
-            </ScrollView>
+            </View>
           ) : null
         }
       />
@@ -623,205 +625,264 @@ const AutomationRulesScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#f4f5f7',
   },
+
   emptyContainer: {
-    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 60,
+    paddingVertical: 80,
   },
+
   emptyText: {
-    fontSize: 16,
-    color: '#999',
-    fontWeight: '600',
+    fontSize: 20,
+    color: '#374151',
+    fontWeight: '700',
   },
+
   emptySubtext: {
     fontSize: 14,
-    color: '#ccc',
+    color: '#9ca3af',
     marginTop: 8,
   },
+
   ruleCard: {
     backgroundColor: '#fff',
-    borderRadius: 10,
-    margin: 12,
-    padding: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#007AFF',
+    borderRadius: 20,
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 18,
+
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+
+    elevation: 2,
   },
+
   ruleCardDisabled: {
-    opacity: 0.6,
-    borderLeftColor: '#ccc',
+    opacity: 0.55,
   },
+
   ruleHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+    alignItems: 'flex-start',
+    marginBottom: 18,
   },
+
   ruleName: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '700',
-    color: '#333',
+    color: '#111827',
     flex: 1,
+    paddingRight: 12,
   },
+
   conditionsSection: {
-    marginBottom: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    marginBottom: 18,
+    backgroundColor: '#f9fafb',
+    borderRadius: 14,
+    padding: 14,
   },
+
   sectionLabel: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#666',
+    fontWeight: '700',
+    color: '#6b7280',
     textTransform: 'uppercase',
-    marginBottom: 6,
+    marginBottom: 10,
+    letterSpacing: 0.5,
   },
+
   conditionText: {
     fontSize: 14,
-    color: '#555',
-    marginLeft: 8,
-    marginBottom: 4,
+    color: '#374151',
+    marginBottom: 6,
+    lineHeight: 20,
   },
+
   actionSection: {
-    marginBottom: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    marginBottom: 18,
+    backgroundColor: '#f9fafb',
+    borderRadius: 14,
+    padding: 14,
   },
+
   actionText: {
     fontSize: 14,
-    color: '#007AFF',
+    color: '#111827',
     fontWeight: '600',
-    marginLeft: 8,
+    lineHeight: 20,
   },
+
   buttonRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
   },
+
   button: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 6,
+    paddingVertical: 13,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
+
   testButton: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#f3f4f6',
   },
+
   deleteButton: {
-    backgroundColor: '#fee',
+    backgroundColor: '#fee2e2',
   },
+
   buttonText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: '#111827',
   },
+
+  deleteButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#dc2626',
+  },
+
   formContainer: {
     backgroundColor: '#fff',
-    margin: 12,
-    padding: 16,
-    borderRadius: 10,
-    marginBottom: 80,
+    margin: 16,
+    padding: 20,
+    borderRadius: 20,
+    marginBottom: 90,
+
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+
+    elevation: 2,
   },
+
   formTitle: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: '700',
-    color: '#333',
-    marginBottom: 16,
+    color: '#111827',
+    marginBottom: 22,
   },
+
   label: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#666',
-    marginTop: 12,
-    marginBottom: 6,
+    color: '#374151',
+    marginTop: 14,
+    marginBottom: 8,
   },
+
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
-    padding: 10,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 14,
     marginBottom: 8,
     fontSize: 14,
+    backgroundColor: '#f9fafb',
   },
+
   picker: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
-    marginBottom: 8,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    marginBottom: 10,
   },
+
   conditionInput: {
-    backgroundColor: '#f9f9f9',
-    borderRadius: 6,
-    padding: 8,
-    marginBottom: 8,
+    backgroundColor: '#f9fafb',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#eee',
-    gap: 4,
+    borderColor: '#f0f0f0',
   },
+
   removeButton: {
-    padding: 8,
-    backgroundColor: '#fee',
-    borderRadius: 4,
-    alignItems: 'center',
-  },
-  removeButtonText: {
-    color: '#d32f2f',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  addConditionButton: {
+    marginTop: 6,
     paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: '#f0f8ff',
-    borderRadius: 6,
+    backgroundColor: '#fee2e2',
+    borderRadius: 10,
     alignItems: 'center',
-    marginVertical: 12,
-    borderWidth: 1,
-    borderColor: '#007AFF',
-    borderStyle: 'dashed',
   },
-  addConditionText: {
-    color: '#007AFF',
+
+  removeButtonText: {
+    color: '#dc2626',
     fontWeight: '600',
     fontSize: 13,
   },
+
+  addConditionButton: {
+    paddingVertical: 13,
+    backgroundColor: '#111827',
+    borderRadius: 12,
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+
+  addConditionText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+
   createButton: {
-    backgroundColor: '#007AFF',
-    marginTop: 16,
+    backgroundColor: '#111827',
+    marginTop: 20,
   },
+
+  createButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+
   cancelButton: {
-    backgroundColor: '#f0f0f0',
-    marginBottom: 16,
+    backgroundColor: '#f3f4f6',
+    marginBottom: 12,
+    marginTop: 10,
   },
+
   fab: {
     position: 'absolute',
     right: 20,
-    bottom: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#007AFF',
+    bottom: 24,
+    width: 58,
+    height: 58,
+    borderRadius: 999,
+    backgroundColor: '#111827',
     justifyContent: 'center',
     alignItems: 'center',
+
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+
     elevation: 5,
   },
+
   fabText: {
-    fontSize: 28,
+    fontSize: 30,
     color: '#fff',
-    fontWeight: '600',
+    fontWeight: '400',
+    marginTop: -2,
   },
 });
 

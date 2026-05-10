@@ -2,7 +2,7 @@
  * UserRoomsScreen.js - User Room Management + Sensor Display
  * Allow users to create, edit, delete rooms and view sensors in their floor
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,8 @@ import { apiService } from '../services/api';
 
 export default function UserRoomsScreen({ navigation, route }) {
   const { floorId, floorName } = route.params;
+  const isMounted = useRef(true);
+  
   const [rooms, setRooms] = useState([]);
   const [sensors, setSensors] = useState({});  // Store sensors for each room
   const [selectedRoomId, setSelectedRoomId] = useState(null);  // Track which room's sensors to show
@@ -44,6 +46,13 @@ export default function UserRoomsScreen({ navigation, route }) {
   });
 
   const sensorTypes = ['temperature', 'humidity', 'motion', 'light', 'co2', 'pressure', 'other'];
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   const roomTypes = [
     'bedroom',
@@ -156,18 +165,31 @@ export default function UserRoomsScreen({ navigation, route }) {
 
   // Delete sensor
   const deleteSensor = async (sensorId) => {
-    const confirmed = window.confirm('Delete this sensor?');
-    if (!confirmed) return;
-
-    try {
-      const response = await apiService.delete(`/sensors/${sensorId}`);
-      if (response && response.success) {
-        Alert.alert('Success', 'Sensor deleted!');
-        loadSensors(currentRoomForSensor);
-      }
-    } catch (error) {
-      Alert.alert('Error', error.message || 'Failed to delete sensor');
-    }
+    Alert.alert(
+      'Delete Sensor',
+      'Delete this sensor?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          onPress: async () => {
+            try {
+              const response = await apiService.delete(`/sensors/${sensorId}`);
+              if (response && response.success) {
+                Alert.alert('Success', 'Sensor deleted!');
+                loadSensors(currentRoomForSensor);
+              }
+            } catch (error) {
+              Alert.alert('Error', error.message || 'Failed to delete sensor');
+            }
+          },
+          style: 'destructive',
+        },
+      ]
+    );
   };
 
   // Open sensor modal to add
@@ -255,30 +277,43 @@ export default function UserRoomsScreen({ navigation, route }) {
   const deleteRoom = async (roomId) => {
     console.log('🗑️ Delete button clicked for room:', roomId);
     
-    const confirmed = window.confirm('Delete this room and all its devices?\nThis action cannot be undone');
-    if (!confirmed) {
-      console.log('❌ Delete cancelled');
-      return;
-    }
-
-    try {
-      console.log('📤 Sending DELETE request to /api/rooms/' + roomId);
-      const response = await apiService.delete(`/rooms/${roomId}`);
-      console.log('📄 Delete response:', response);
-      
-      if (response && response.success) {
-        console.log('✅ Room deleted successfully!');
-        Alert.alert('Success', 'Room deleted!');
-        await loadRooms(false);
-      } else {
-        Alert.alert('Error', response?.error || 'Failed to delete');
-      }
-    } catch (error) {
-      console.error('❌ Delete error:', error);
-      const errorMsg = error.response?.data?.error || error.message || 'Failed to delete room';
-      console.error('Error details:', errorMsg);
-      Alert.alert('Error', errorMsg);
-    }
+    Alert.alert(
+      'Delete Room',
+      'Delete this room and all its devices? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          onPress: () => {
+            console.log('❌ Delete cancelled');
+          },
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          onPress: async () => {
+            try {
+              console.log('📤 Sending DELETE request to /api/rooms/' + roomId);
+              const response = await apiService.delete(`/rooms/${roomId}`);
+              console.log('📄 Delete response:', response);
+              
+              if (response && response.success) {
+                console.log('✅ Room deleted successfully!');
+                Alert.alert('Success', 'Room deleted!');
+                await loadRooms(false);
+              } else {
+                Alert.alert('Error', response?.error || 'Failed to delete');
+              }
+            } catch (error) {
+              console.error('❌ Delete error:', error);
+              const errorMsg = error.response?.data?.error || error.message || 'Failed to delete room';
+              console.error('Error details:', errorMsg);
+              Alert.alert('Error', errorMsg);
+            }
+          },
+          style: 'destructive',
+        },
+      ]
+    );
   };
 
   // Open add room modal
@@ -387,27 +422,31 @@ export default function UserRoomsScreen({ navigation, route }) {
         >
           <View style={styles.roomHeader}>
             <View style={styles.roomInfo}>
-              <Text style={styles.roomName}>🚪 {item.name || 'Unknown'}</Text>
-              <Text style={styles.roomType}>{getRoomTypeDisplay(item.room_type || 'other')}</Text>
+              <Text style={styles.roomName}>{item.name || 'Unknown'}</Text>
+              <Text style={styles.roomType}>
+                {(item.room_type || 'other').replace('_', ' ')}
+              </Text>
             </View>
             <View style={styles.roomActions}>
               <TouchableOpacity
                 style={styles.editBtn}
                 onPress={() => openEditModal(item)}
               >
-                <Text style={styles.editBtnText}>✎</Text>
+                <Text style={styles.editBtnText}>Edit</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.deleteBtn}
                 onPress={() => deleteRoom(item.id)}
               >
-                <Text style={styles.deleteBtnText}>🗑</Text>
+                <Text style={styles.deleteBtnText}>Delete</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.expandBtn, isExpanded && styles.expandBtnActive]}
                 onPress={() => setSelectedRoomId(isExpanded ? null : item.id)}
               >
-                <Text style={styles.expandBtnText}>{isExpanded ? '▼' : '▶'}</Text>
+                <Text style={styles.expandBtnText}>
+                  Details
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -418,15 +457,20 @@ export default function UserRoomsScreen({ navigation, route }) {
         ) : null}
 
         <View style={styles.roomMeta}>
-          <Text style={styles.devicesCount}>⚙️ {Number(item.devices) || 0}</Text>
-          <Text style={styles.sensorsCount}>📊 {roomSensors.length}</Text>
+          <Text style={styles.devicesCount}>
+            {Number(item.devices) || 0} devices
+          </Text>
+
+          <Text style={styles.sensorsCount}>
+            {roomSensors.length} sensors
+          </Text>
         </View>
 
         {/* Sensors section - shown when expanded */}
         {isExpanded && (
           <View style={styles.sensorsSection}>
             <View style={styles.sensorsSectionHeader}>
-              <Text style={styles.sectionTitle}>📊 Sensors:</Text>
+              <Text style={styles.sectionTitle}>Sensors:</Text>
               <TouchableOpacity
                 style={styles.addSensorBtn}
                 onPress={() => openAddSensorModal(item.id)}
@@ -437,7 +481,7 @@ export default function UserRoomsScreen({ navigation, route }) {
             {roomSensors.length > 0 ? (
               <View style={styles.sensorsList}>
                 {roomSensors.map((sensor) => (
-                  <View key={sensor.id} style={styles.sensorCard}>
+                  <View key={sensor.id}>
                     {renderSensorItem(sensor, item.id)}
                   </View>
                 ))}
@@ -454,13 +498,13 @@ export default function UserRoomsScreen({ navigation, route }) {
             style={[styles.navigateBtn, { flex: 1, marginRight: 6 }]}
             onPress={() => navigation.navigate('UserDevices', { roomId: item.id, roomName: item.name })}
           >
-            <Text style={styles.navigateBtnText}>👉 Devices</Text>
+            <Text style={styles.navigateBtnText}>Devices</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.navigateBtn, { flex: 1, marginLeft: 6, backgroundColor: '#9b59b6' }]}
+            style={[styles.navigateBtn, { flex: 1, marginLeft: 6 }]}
             onPress={() => navigation.navigate('AutomationRules', { roomId: item.id, roomName: item.name })}
           >
-            <Text style={styles.navigateBtnText}>⚙️ Automation</Text>
+            <Text style={styles.navigateBtnText}>Automation</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -470,7 +514,7 @@ export default function UserRoomsScreen({ navigation, route }) {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#e74c3c" />
+        <ActivityIndicator size="large" color="#111827" />
         <Text style={styles.loadingText}>Loading rooms...</Text>
       </View>
     );
@@ -479,8 +523,10 @@ export default function UserRoomsScreen({ navigation, route }) {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerText}>📍 {floorName}</Text>
+      <View style={styles.pageHeader}>
+        <Text style={styles.pageTitle}>
+          {floorName}
+        </Text>
       </View>
 
       {/* Add Room Button */}
@@ -509,7 +555,7 @@ export default function UserRoomsScreen({ navigation, route }) {
           <ScrollView style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {editingRoom ? '✏️ Edit Room' : '🚪 New Room'}
+                {editingRoom ? 'Edit Room' : 'New Room'}
               </Text>
               <TouchableOpacity onPress={resetForm}>
                 <Text style={styles.closeBtn}>✕</Text>
@@ -633,361 +679,512 @@ export default function UserRoomsScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f4f5f7',
   },
+
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+
   loadingText: {
     marginTop: 10,
     fontSize: 14,
-    color: '#666',
+    color: '#6b7280',
   },
-  header: {
-    backgroundColor: '#9b59b6',
-    padding: 15,
-    alignItems: 'center',
+
+  pageHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 8,
   },
-  headerText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+
+  pageTitle: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#111827',
   },
+
   addBtn: {
-    backgroundColor: '#27ae60',
-    margin: 15,
-    padding: 15,
-    borderRadius: 8,
+    backgroundColor: '#111827',
+
+    marginHorizontal: 16,
+    marginBottom: 16,
+
+    paddingVertical: 13,
+
+    borderRadius: 14,
+
     alignItems: 'center',
-  },
-  addBtnText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  listContent: {
-    paddingHorizontal: 15,
-    paddingBottom: 20,
-  },
-  roomCard: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#9b59b6',
+
+    shadowColor: '#000',
+    shadowOpacity: 0.02,
+    shadowRadius: 4,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
     elevation: 2,
-    overflow: 'hidden',
   },
+
+  addBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 30,
+  },
+
+  roomCard: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    marginBottom: 14,
+
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
+    elevation: 2,
+  },
+
   roomHeaderButton: {
-    padding: 15,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 10,
   },
+
   roomHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  roomInfo: {
-    flex: 1,
-  },
-  roomName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  roomType: {
-    fontSize: 13,
-    color: '#999',
-    marginTop: 2,
-  },
-  roomActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  editBtn: {
-    backgroundColor: '#3498db',
-    padding: 8,
-    borderRadius: 4,
-  },
-  editBtnText: {
-    color: 'white',
-    fontSize: 16,
-  },
-  deleteBtn: {
-    backgroundColor: '#e74c3c',
-    padding: 8,
-    borderRadius: 4,
-  },
-  deleteBtnText: {
-    color: 'white',
-    fontSize: 16,
-  },
-  expandBtn: {
-    backgroundColor: '#95a5a6',
-    padding: 8,
-    borderRadius: 4,
-    width: 32,
-    alignItems: 'center',
-  },
-  expandBtnActive: {
-    backgroundColor: '#e67e22',
-  },
-  expandBtnText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  roomDescription: {
-    fontSize: 14,
-    color: '#666',
-    paddingHorizontal: 15,
-    marginBottom: 8,
-  },
-  roomMeta: {
-    flexDirection: 'row',
-    gap: 15,
-    paddingHorizontal: 15,
-    marginBottom: 12,
-  },
-  devicesCount: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '600',
-  },
-  sensorsCount: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '600',
-  },
-
-  // Sensors section
-  sensorsSection: {
-    backgroundColor: '#f9f9f9',
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 10,
-  },
-  sensorsList: {
-    marginTop: 0,
-  },
-  sensorCard: {
-    backgroundColor: 'white',
-    borderRadius: 6,
-    padding: 10,
-    marginBottom: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#3498db',
-  },
-  sensorInfo: {
-    marginLeft: 5,
-    flex: 1,
-  },
-  sensorName: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: 6,
-  },
-  sensorNameDisplay: {
-    fontSize: 12,
-    color: '#555',
-    marginBottom: 4,
-    fontWeight: '500',
-  },
-  sensorValueDisplay: {
-    fontSize: 13,
-    color: '#27ae60',
-    marginBottom: 2,
-    fontWeight: '600',
-  },
-  sensorNoValue: {
-    fontSize: 11,
-    color: '#bdc3c7',
-    fontStyle: 'italic',
-  },
-  noSensorsText: {
-    fontSize: 12,
-    color: '#999',
-    fontStyle: 'italic',
-    marginLeft: 5,
-  },
-
-  // Button row for side-by-side buttons
-  buttonRow: {
-    flexDirection: 'row',
-    marginHorizontal: 15,
-    marginTop: 0,
-    marginBottom: 15,
-    gap: 0,
-  },
-
-  // Navigation button
-  navigateBtn: {
-    backgroundColor: '#e67e22',
-    padding: 12,
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  navigateBtnText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-
-  emptyContainer: {
-    alignItems: 'center',
-    paddingTop: 60,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#666',
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#999',
-    marginTop: 8,
-  },
-
-  // Modal styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: '80%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  closeBtn: {
-    fontSize: 24,
-    color: '#999',
-  },
-  formContainer: {
-    marginBottom: 30,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 6,
-    marginTop: 12,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
-    padding: 12,
-    fontSize: 14,
-    backgroundColor: '#f9f9f9',
-  },
-  descriptionInput: {
-    textAlignVertical: 'top',
-  },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
-    backgroundColor: '#f9f9f9',
-    overflow: 'hidden',
-  },
-  picker: {
-    height: 50,
-  },
-  buttonGroup: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 25,
-  },
-  btn: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  saveBtn: {
-    backgroundColor: '#27ae60',
-  },
-  saveBtnText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  cancelBtn: {
-    backgroundColor: '#ecf0f1',
-  },
-  cancelBtnText: {
-    color: '#333',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-
-  // Sensor specific styles
-  sensorsSectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  addSensorBtn: {
-    backgroundColor: '#2ecc71',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-  },
-  addSensorBtnText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  sensorHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
+
+  roomInfo: {
+    flex: 1,
+    paddingRight: 12,
+  },
+
+  roomName: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#111827',
+  },
+
+  roomType: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginTop: 4,
+    textTransform: 'capitalize',
+  },
+
+  roomActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  editBtn: {
+    backgroundColor: '#f3f4f6',
+
+    minWidth: 64,
+
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+
+    borderRadius: 10,
+
+    marginRight: 8,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  editBtnText: {
+    color: '#111827',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  deleteBtn: {
+    backgroundColor: '#fee2e2',
+
+    minWidth: 72,
+
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+
+    borderRadius: 10,
+
+    marginRight: 8,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  deleteBtnText: {
+    color: '#dc2626',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  expandBtn: {
+    backgroundColor: '#111827',
+
+    minWidth: 82,
+
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+
+    borderRadius: 10,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  expandBtnActive: {
+    backgroundColor: '#e5e7eb',
+  },
+
+  expandBtnText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  roomDescription: {
+    fontSize: 14,
+    color: '#6b7280',
+
+    paddingHorizontal: 18,
+
+    marginBottom: 8,
+
+    lineHeight: 20,
+  },
+
+  roomMeta: {
+    flexDirection: 'row',
+
+    paddingHorizontal: 18,
+
+    marginBottom: 14,
+  },
+
+  devicesCount: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginRight: 16,
+  },
+
+  sensorsCount: {
+    fontSize: 13,
+    color: '#6b7280',
+  },
+
+  sensorsSection: {
+    marginHorizontal: 18,
+    marginBottom: 16,
+
+    paddingTop: 2,
+  },
+
+  sensorsSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+
+    marginBottom: 12,
+  },
+
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+  },
+
+  addSensorBtn: {
+    backgroundColor: '#111827',
+
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+
+    borderRadius: 10,
+  },
+
+  addSensorBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  sensorCard: {
+    backgroundColor: '#f9fafb',
+
+    borderRadius: 12,
+
+    padding: 14,
+
+    marginBottom: 10,
+
+    borderWidth: 1,
+    borderColor: '#ececec',
+  },
+
+  sensorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+
+  sensorInfo: {
+    flex: 1,
+    paddingRight: 10,
+  },
+
+  sensorName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
+  },
+
+  sensorNameDisplay: {
+    fontSize: 13,
+    color: '#4b5563',
+    marginBottom: 6,
+  },
+
+  sensorValueDisplay: {
+    fontSize: 13,
+    color: '#111827',
+    fontWeight: '600',
+  },
+
+  sensorNoValue: {
+    fontSize: 12,
+    color: '#9ca3af',
+  },
+
   sensorActions: {
     flexDirection: 'row',
-    gap: 6,
-    marginTop: 2,
+    alignItems: 'center',
   },
+
   sensorEditBtn: {
-    backgroundColor: '#3498db',
-    padding: 6,
-    borderRadius: 3,
+    backgroundColor: '#f3f4f6',
+
+    minWidth: 56,
+
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+
+    borderRadius: 8,
+
+    marginRight: 6,
+
+    alignItems: 'center',
   },
+
   sensorEditBtnText: {
-    color: 'white',
+    color: '#111827',
     fontSize: 12,
+    fontWeight: '600',
   },
+
   sensorDeleteBtn: {
-    backgroundColor: '#e74c3c',
-    padding: 6,
-    borderRadius: 3,
+    backgroundColor: '#fee2e2',
+
+    minWidth: 64,
+
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+
+    borderRadius: 8,
+
+    alignItems: 'center',
   },
+
   sensorDeleteBtnText: {
-    color: 'white',
+    color: '#dc2626',
     fontSize: 12,
+    fontWeight: '600',
+  },
+
+  noSensorsText: {
+    fontSize: 13,
+    color: '#9ca3af',
+  },
+
+  buttonRow: {
+    flexDirection: 'row',
+
+    paddingHorizontal: 18,
+
+    paddingBottom: 18,
+  },
+
+  navigateBtn: {
+    backgroundColor: '#111827',
+
+    paddingVertical: 11,
+
+    borderRadius: 12,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  automationBtn: {
+    backgroundColor: '#111827',
+  },
+
+  navigateBtnText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  emptyContainer: {
+    alignItems: 'center',
+    paddingTop: 80,
+  },
+
+  emptyText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#374151',
+  },
+
+  emptySubtext: {
+    fontSize: 14,
+    color: '#9ca3af',
+    marginTop: 8,
+  },
+
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+
+  modalContent: {
+    backgroundColor: '#fff',
+
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+
+    padding: 22,
+
+    maxHeight: '85%',
+  },
+
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+
+    marginBottom: 20,
+  },
+
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#111827',
+  },
+
+  closeBtn: {
+    fontSize: 24,
+    color: '#9ca3af',
+  },
+
+  formContainer: {
+    marginBottom: 30,
+  },
+
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+
+    marginBottom: 8,
+    marginTop: 14,
+  },
+
+  input: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+
+    borderRadius: 12,
+
+    padding: 14,
+
+    fontSize: 14,
+
+    backgroundColor: '#f9fafb',
+
+    color: '#111827',
+  },
+
+  descriptionInput: {
+    textAlignVertical: 'top',
+  },
+
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+
+    borderRadius: 12,
+
+    backgroundColor: '#f9fafb',
+
+    overflow: 'hidden',
+  },
+
+  picker: {
+    height: 50,
+  },
+
+  buttonGroup: {
+    flexDirection: 'row',
+    marginTop: 28,
+  },
+
+  btn: {
+    flex: 1,
+
+    paddingVertical: 14,
+
+    borderRadius: 12,
+
+    alignItems: 'center',
+  },
+
+  saveBtn: {
+    backgroundColor: '#111827',
+    marginRight: 8,
+  },
+
+  saveBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+
+  cancelBtn: {
+    backgroundColor: '#f3f4f6',
+    marginLeft: 8,
+  },
+
+  cancelBtnText: {
+    color: '#111827',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

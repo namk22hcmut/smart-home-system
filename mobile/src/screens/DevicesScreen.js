@@ -2,7 +2,7 @@
  * UserDevicesScreen.js - User Device Management
  * Allow users to create, edit, delete devices in their room
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,6 @@ import {
   Modal,
   TextInput,
   ScrollView,
-  Switch,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { apiService } from '../services/api';
@@ -23,6 +22,12 @@ import CustomSlider from '../components/CustomSlider';
 
 export default function UserDevicesScreen({ navigation, route }) {
   const { roomId, roomName } = route.params;
+  const isMounted = useRef(true);
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -54,18 +59,24 @@ export default function UserDevicesScreen({ navigation, route }) {
   const loadDevices = async (showLoader = true) => {
     if (showLoader) setLoading(true);
     setRefreshing(true);
+
     try {
       const response = await apiService.get(`/rooms/${roomId}/devices`);
-      if (response && response.success) {
+
+      if (response && response.success && isMounted.current) {
         setDevices(response.data || []);
-        console.log('✅ Loaded', (response.data || []).length, 'devices');
       }
     } catch (error) {
-      console.error('❌ Error loading devices:', error);
-      Alert.alert('Error', 'Failed to load devices');
+      console.error('Error loading devices:', error);
+
+      if (isMounted.current) {
+        Alert.alert('Error', 'Failed to load devices');
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (isMounted.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
@@ -108,7 +119,7 @@ export default function UserDevicesScreen({ navigation, route }) {
     }
 
     try {
-      const response = await apiService.put(`/devices/${editingDevice.id}`, {
+      const response = await apiService.put(`/devices/${editingDevice.id || editingDevice.device_id}`, {
         device_name: formData.device_name,
         device_type: formData.device_type,
         status: formData.status,
@@ -127,38 +138,60 @@ export default function UserDevicesScreen({ navigation, route }) {
 
   // Delete device
   const deleteDevice = async (deviceId) => {
-    console.log('🗑️ Delete button clicked for device:', deviceId);
-    
-    const confirmed = window.confirm('Delete this device?\nThis action cannot be undone');
-    if (!confirmed) {
-      console.log('❌ Delete cancelled');
-      return;
-    }
+    Alert.alert(
+      'Delete Device',
+      'Delete this device? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
 
-    try {
-      console.log('📤 Sending DELETE request to /api/devices/' + deviceId);
-      const response = await apiService.delete(`/devices/${deviceId}`);
-      console.log('✅ Delete response:', response);
-      
-      if (response && response.success) {
-        console.log('✅ Device deleted successfully!');
-        Alert.alert('Success', 'Device deleted!');
-        await loadDevices(false);
-      } else {
-        Alert.alert('Error', response?.error || 'Failed to delete');
-      }
-    } catch (error) {
-      console.error('❌ Delete error:', error);
-      const errorMsg = error.response?.data?.error || error.message || 'Failed to delete device';
-      console.error('Error details:', errorMsg);
-      Alert.alert('Error', errorMsg);
-    }
+          onPress: async () => {
+            try {
+              const response = await apiService.delete(
+                `/devices/${deviceId}`
+              );
+
+              if (response && response.success) {
+                Alert.alert(
+                  'Success',
+                  'Device deleted!'
+                );
+
+                await loadDevices(false);
+              } else {
+                Alert.alert(
+                  'Error',
+                  response?.error || 'Failed to delete'
+                );
+              }
+            } catch (error) {
+              const errorMsg =
+                error.response?.data?.error ||
+                error.message ||
+                'Failed to delete device';
+
+              Alert.alert('Error', errorMsg);
+            }
+          },
+        },
+      ]
+    );
   };
 
   // Toggle device status
   const toggleDeviceStatus = async (device) => {
     const itemId = device.id || device.device_id;
-    const newStatus = device.status === 'on' ? 'off' : 'on';
+    const currentStatus = String(device.status || 'off').toLowerCase();
+
+    const newStatus =
+      currentStatus === 'on'
+        ? 'off'
+        : 'on';
     
     try {
       console.log(`🔄 Toggling device ${itemId} to ${newStatus}`);
@@ -191,7 +224,10 @@ export default function UserDevicesScreen({ navigation, route }) {
       const response = await apiService.put(`/devices/${itemId}`, {
         device_name: device.device_name || device.name,
         device_type: device.device_type || device.type,
-        status: newLevel > 0 ? 'on' : 'off',
+        status:
+          newLevel > 0
+            ? 'on'
+            : 'off',
         level: newLevel,
       });
 
@@ -217,12 +253,19 @@ export default function UserDevicesScreen({ navigation, route }) {
   // Open edit device modal
   const openEditModal = (device) => {
     setEditingDevice(device);
+
     setFormData({
-      device_name: device.name,
-      device_type: device.type,
-      status: device.status,
-      level: device.level.toString(),
+      device_name:
+        device.name || device.device_name || '',
+
+      device_type:
+        device.type || device.device_type || 'light',
+
+      status: device.status || 'off',
+
+      level: String(device.level || 0),
     });
+
     setModalVisible(true);
   };
 
@@ -241,107 +284,158 @@ export default function UserDevicesScreen({ navigation, route }) {
   // Get device type display
   const getDeviceTypeDisplay = (type) => {
     const types = {
-      light: '💡 Light',
-      fan: '🌀 Fan',
-      ac: '❄️ Air Conditioner',
-      heater: '🔥 Heater',
-      door_lock: '🔒 Door Lock',
-      security_camera: '📹 Camera',
-      plug: '🔌 Smart Plug',
-      switch: '🔘 Switch',
-      thermostat: '🌡️ Thermostat',
-      other: '⚙️ Other',
+      light: 'Light',
+      fan: 'Fan',
+      ac: 'Air Conditioner',
+      heater: 'Heater',
+      door_lock: 'Door Lock',
+      security_camera: 'Camera',
+      plug: 'Smart Plug',
+      switch: 'Switch',
+      thermostat: 'Thermostat',
+      other: 'Other',
     };
-    return types[type] || type;
-  };
 
-  // Get status color
-  const getStatusColor = (status) => {
-    return status === 'on' ? '#27ae60' : '#95a5a6';
+    return types[type] || type;
   };
 
   // Render device item
   const renderDeviceItem = ({ item }) => {
-    // Debug: log item structure
     const itemId = item.id || item.device_id;
+
     if (!itemId) {
       console.warn('⚠️ Device item missing id:', item);
       return null;
     }
 
-    // Normalize item properties
     const deviceStatus = String(item.status || 'off').toLowerCase();
     const deviceLevel = Number(item.level) || 0;
 
     return (
-    <View style={styles.deviceCard}>
-      <View style={styles.deviceHeader}>
-        <View style={styles.deviceInfo}>
-          <Text style={styles.deviceName}>⚙️ {String(item.name || item.device_name || 'Unknown')}</Text>
-          <Text style={styles.deviceType}>{getDeviceTypeDisplay(String(item.type || item.device_type || 'other'))}</Text>
-        </View>
-        <View style={styles.deviceActions}>
-          <TouchableOpacity
-            style={[styles.statusBtn, { backgroundColor: getStatusColor(deviceStatus) }]}
-            onPress={() => toggleDeviceStatus(item)}
-          >
-            <Text style={styles.statusBtnText}>{deviceStatus.toUpperCase()}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.scheduleBtn}
-            onPress={() => navigation.navigate('DeviceScheduling', { device: { ...item, id: itemId } })}
-            title="Schedule"
-          >
-            <Text style={styles.scheduleBtnText}>⏰</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.logsBtn}
-            onPress={() => navigation.navigate('DeviceActivityLogs', { device: { ...item, id: itemId } })}
-            title="Logs"
-          >
-            <Text style={styles.logsBtnText}>📋</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.editBtn}
-            onPress={() => openEditModal({ ...item, id: itemId })}
-          >
-            <Text style={styles.editBtnText}>✎</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.deleteBtn}
-            onPress={() => deleteDevice(itemId)}
-          >
-            <Text style={styles.deleteBtnText}>🗑</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-      
-      {item.device_type !== 'door_lock' && item.device_type !== 'switch' && item.type !== 'door_lock' && item.type !== 'switch' && (
-        <View style={styles.levelContainer}>
-          <View style={styles.levelHeader}>
-            <Text style={styles.levelLabel}>💡 Brightness</Text>
-            <Text style={styles.levelValue}>{deviceLevel}%</Text>
+      <View style={styles.deviceCard}>
+        <View style={styles.deviceHeader}>
+          <View style={styles.deviceInfo}>
+            <Text style={styles.deviceName}>
+              {String(item.name || item.device_name || 'Unknown')}
+            </Text>
+
+            <Text style={styles.deviceType}>
+              {getDeviceTypeDisplay(
+                String(item.type || item.device_type || 'other')
+              )}
+            </Text>
           </View>
-          <CustomSlider
-            min={0}
-            max={100}
-            value={deviceLevel}
-            onChange={(newLevel) => {
-              console.log(`🔄 Slider moved to ${newLevel}%`);
-              updateDeviceLevel(item, newLevel);
-            }}
-            style={styles.slider}
-          />
+
+          <View style={styles.deviceActions}>
+            <TouchableOpacity
+              style={[
+                styles.statusBtn,
+                {
+                  backgroundColor:
+                    deviceStatus === 'on'
+                      ? '#111827'
+                      : '#d1d5db'
+                }
+              ]}
+              onPress={() => toggleDeviceStatus(item)}
+            >
+              <Text
+                style={[
+                  styles.statusBtnText,
+                  {
+                    color:
+                      deviceStatus === 'on'
+                        ? '#fff'
+                        : '#374151'
+                  }
+                ]}
+              >
+                {deviceStatus === 'on' ? 'ON' : 'OFF'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() =>
+                navigation.navigate('DeviceScheduling', {
+                  device: { ...item, id: itemId }
+                })
+              }
+            >
+              <Text style={styles.actionBtnText}>
+                Schedule
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() =>
+                navigation.navigate('DeviceActivityLogs', {
+                  device: { ...item, id: itemId }
+                })
+              }
+            >
+              <Text style={styles.actionBtnText}>
+                Logs
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.editBtn}
+              onPress={() =>
+                openEditModal({ ...item, id: itemId })
+              }
+            >
+              <Text style={styles.editBtnText}>
+                Edit
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.deleteBtn}
+              onPress={() => deleteDevice(itemId)}
+            >
+              <Text style={styles.deleteBtnText}>
+                Delete
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      )}
-    </View>
+
+        {item.device_type !== 'door_lock' &&
+          item.device_type !== 'switch' &&
+          item.type !== 'door_lock' &&
+          item.type !== 'switch' && (
+            <View style={styles.levelContainer}>
+              <View style={styles.levelHeader}>
+                <Text style={styles.levelLabel}>
+                  Level
+                </Text>
+
+                <Text style={styles.levelValue}>
+                  {deviceLevel}%
+                </Text>
+              </View>
+
+              <CustomSlider
+                min={0}
+                max={100}
+                value={deviceLevel}
+                onChange={(newLevel) => {
+                  updateDeviceLevel(item, newLevel);
+                }}
+                style={styles.slider}
+              />
+            </View>
+          )}
+      </View>
     );
   };
 
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#e74c3c" />
+        <ActivityIndicator size="large" color="#111827" />
         <Text style={styles.loadingText}>Loading devices...</Text>
       </View>
     );
@@ -351,7 +445,7 @@ export default function UserDevicesScreen({ navigation, route }) {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerText}>🚪 {roomName}</Text>
+        <Text style={styles.headerText}>{roomName}</Text>
       </View>
 
       {/* Add Device Button */}
@@ -380,7 +474,7 @@ export default function UserDevicesScreen({ navigation, route }) {
           <ScrollView style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {editingDevice ? '✏️ Edit Device' : '⚙️ New Device'}
+                {editingDevice ? 'Edit Device' : 'New Device'}
               </Text>
               <TouchableOpacity onPress={resetForm}>
                 <Text style={styles.closeBtn}>✕</Text>
@@ -440,7 +534,7 @@ export default function UserDevicesScreen({ navigation, route }) {
                 keyboardType="numeric"
               />
 
-              <Text style={styles.hint}>💡 Tip: Level is used for dimmable lights, fans speed, etc.</Text>
+              <Text style={styles.hint}>Level is used for dimmable lights, fan speed, and similar devices.</Text>
 
               {/* Buttons */}
               <View style={styles.buttonGroup}>
@@ -470,261 +564,302 @@ export default function UserDevicesScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f4f5f7',
   },
+
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+
   loadingText: {
     marginTop: 10,
     fontSize: 14,
     color: '#666',
   },
+
   header: {
-    backgroundColor: '#f39c12',
-    padding: 15,
-    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ececec',
   },
+
   headerText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+    color: '#111827',
+    fontSize: 22,
+    fontWeight: '700',
   },
+
   addBtn: {
-    backgroundColor: '#27ae60',
-    margin: 15,
-    padding: 15,
-    borderRadius: 8,
+    backgroundColor: '#111827',
+    margin: 16,
+    paddingVertical: 14,
+    borderRadius: 14,
     alignItems: 'center',
   },
+
   addBtnText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
+
   listContent: {
-    paddingHorizontal: 15,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    paddingBottom: 30,
   },
+
   deviceCard: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    padding: 15,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#f39c12',
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 16,
+
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
     elevation: 2,
   },
+
   deviceHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+    alignItems: 'flex-start',
+    marginBottom: 14,
   },
+
   deviceInfo: {
     flex: 1,
+    paddingRight: 10,
   },
+
   deviceName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
   },
+
   deviceType: {
     fontSize: 13,
-    color: '#999',
-    marginTop: 2,
+    color: '#6b7280',
+    marginTop: 4,
   },
+
   deviceActions: {
     flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: 6,
   },
+
   statusBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
+
   statusBtnText: {
-    color: 'white',
-    fontSize: 11,
-    fontWeight: 'bold',
+    fontSize: 12,
+    fontWeight: '700',
   },
+
+  actionBtn: {
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+
+  actionBtnText: {
+    color: '#111827',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
   editBtn: {
-    backgroundColor: '#3498db',
-    padding: 8,
-    borderRadius: 4,
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
+
   editBtnText: {
-    color: 'white',
-    fontSize: 16,
+    color: '#111827',
+    fontSize: 12,
+    fontWeight: '600',
   },
-  scheduleBtn: {
-    backgroundColor: '#FF9800',
-    padding: 8,
-    borderRadius: 4,
-    marginRight: 4,
-  },
-  scheduleBtnText: {
-    color: 'white',
-    fontSize: 16,
-  },
-  logsBtn: {
-    backgroundColor: '#2196F3',
-    padding: 8,
-    borderRadius: 4,
-    marginRight: 4,
-  },
-  logsBtnText: {
-    color: 'white',
-    fontSize: 16,
-  },
+
   deleteBtn: {
-    backgroundColor: '#e74c3c',
-    padding: 8,
-    borderRadius: 4,
+    backgroundColor: '#fee2e2',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
+
   deleteBtnText: {
-    color: 'white',
-    fontSize: 16,
+    color: '#dc2626',
+    fontSize: 12,
+    fontWeight: '600',
   },
+
   levelContainer: {
-    marginTop: 15,
-    backgroundColor: '#f9f9f9',
-    padding: 12,
-    borderRadius: 6,
+    marginTop: 8,
+    backgroundColor: '#f9fafb',
+    padding: 14,
+    borderRadius: 14,
   },
+
   levelHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
   },
+
   levelLabel: {
     fontSize: 13,
-    color: '#666',
+    color: '#6b7280',
     fontWeight: '600',
   },
+
   levelValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#f39c12',
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
   },
+
   slider: {
-    marginTop: 8,
+    marginTop: 4,
   },
-  levelBar: {
-    height: 6,
-    backgroundColor: '#ecf0f1',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  levelFill: {
-    height: '100%',
-  },
+
   emptyContainer: {
     alignItems: 'center',
-    paddingTop: 60,
+    paddingTop: 80,
   },
+
   emptyText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#666',
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#374151',
   },
+
   emptySubtext: {
     fontSize: 14,
-    color: '#999',
+    color: '#9ca3af',
     marginTop: 8,
   },
 
-  // Modal styles
   modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'flex-end',
   },
+
   modalContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 22,
     maxHeight: '85%',
   },
+
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
   },
+
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
   },
+
   closeBtn: {
     fontSize: 24,
-    color: '#999',
+    color: '#9ca3af',
   },
+
   formContainer: {
     marginBottom: 30,
   },
+
   label: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 6,
-    marginTop: 12,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+    marginTop: 14,
   },
+
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
-    padding: 12,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 14,
     fontSize: 14,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: '#f9fafb',
   },
+
   pickerContainer: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
-    backgroundColor: '#f9f9f9',
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    backgroundColor: '#f9fafb',
     overflow: 'hidden',
   },
+
   picker: {
     height: 50,
   },
+
   hint: {
     fontSize: 12,
-    color: '#3498db',
+    color: '#6b7280',
     marginTop: 8,
-    fontStyle: 'italic',
+    lineHeight: 18,
   },
+
   buttonGroup: {
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 25,
+    marginTop: 28,
   },
+
   btn: {
     flex: 1,
-    padding: 14,
-    borderRadius: 6,
+    paddingVertical: 14,
+    borderRadius: 12,
     alignItems: 'center',
   },
+
   saveBtn: {
-    backgroundColor: '#27ae60',
+    backgroundColor: '#111827',
+    marginRight: 8,
   },
+
   saveBtnText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
+
   cancelBtn: {
-    backgroundColor: '#ecf0f1',
+    backgroundColor: '#f3f4f6',
+    marginLeft: 8,
   },
+
   cancelBtnText: {
-    color: '#333',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: '#111827',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

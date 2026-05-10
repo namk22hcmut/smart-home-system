@@ -28,9 +28,9 @@ export default function UserManagement({ navigation }) {
     setRefreshing(true);
     try {
       const response = await apiService.get('/admin/users');
-      if (response.data.success) {
-        setUsers(response.data.data);
-        console.log('✅ Loaded', response.data.data.length, 'users');
+      if (response.success) {
+        setUsers(response.data);
+        console.log('✅ Loaded', response.data.length, 'users');
       }
     } catch (error) {
       console.error('❌ Error loading users:', error);
@@ -69,11 +69,11 @@ export default function UserManagement({ navigation }) {
           reason: 'Disabled by admin',
         });
         console.log('Disable response:', response);
-        if (response.data.success) {
+        if (response.success) {
           Alert.alert('Success', `${username} has been disabled`);
           loadUsers(false);
         } else {
-          Alert.alert('Error', response.data.error || 'Failed to disable user');
+          Alert.alert('Error', response.error || 'Failed to disable user');
         }
       } catch (error) {
         console.error('❌ Disable error:', error);
@@ -89,11 +89,11 @@ export default function UserManagement({ navigation }) {
         console.log(`🟢 Enabling user ${userId}...`);
         const response = await apiService.put(`/admin/users/${userId}/enable`);
         console.log('Enable response:', response);
-        if (response.data.success) {
+        if (response.success) {
           Alert.alert('Success', `${username} has been enabled`);
           loadUsers(false);
         } else {
-          Alert.alert('Error', response.data.error || 'Failed to enable user');
+          Alert.alert('Error', response.error || 'Failed to enable user');
         }
       } catch (error) {
         console.error('❌ Enable error:', error);
@@ -112,11 +112,11 @@ export default function UserManagement({ navigation }) {
           new_role: newRole,
         });
         console.log('Role change response:', response);
-        if (response.data.success) {
+        if (response.success) {
           Alert.alert('Success', `${username} is now a ${newRole}`);
           loadUsers(false);
         } else {
-          Alert.alert('Error', response.data.error || 'Failed to change role');
+          Alert.alert('Error', response.error || 'Failed to change role');
         }
       } catch (error) {
         console.error('❌ Role change error:', error);
@@ -132,11 +132,11 @@ export default function UserManagement({ navigation }) {
         console.log(`🗑️ Deleting user ${userId}...`);
         const response = await apiService.delete(`/admin/users/${userId}/delete`);
         console.log('Delete response:', response);
-        if (response.data.success) {
+        if (response.success) {
           Alert.alert('Success', `${username} has been deleted`);
           loadUsers(false);
         } else {
-          Alert.alert('Error', response.data.error || 'Failed to delete user');
+          Alert.alert('Error', response.error || 'Failed to delete user');
         }
       } catch (error) {
         console.error('❌ Delete error:', error);
@@ -162,7 +162,6 @@ export default function UserManagement({ navigation }) {
         </View>
         <View style={styles.roleBadge}>
           <Text style={[styles.roleText, item.role === 'admin' && { color: '#e74c3c' }]}>
-            {item.role === 'admin' ? '🔑 ' : '👤 '}
             {item.role.toUpperCase()}
           </Text>
         </View>
@@ -170,7 +169,6 @@ export default function UserManagement({ navigation }) {
 
       <View style={styles.statusRow}>
         <Text style={[styles.status, { color: item.status === 'active' ? '#2ecc71' : '#e74c3c' }]}>
-          {item.status === 'active' ? '🟢 ' : '🔴 '}
           {item.status.toUpperCase()}
         </Text>
         <Text style={styles.fullName}>{item.full_name}</Text>
@@ -183,14 +181,14 @@ export default function UserManagement({ navigation }) {
       <View style={styles.actionButtons}>
         {item.status === 'active' ? (
           <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#e74c3c' }]}
+            style={[styles.actionBtn, { backgroundColor: '#111827' }]}
             onPress={() => disableUser(item.user_id, item.username)}
           >
             <Text style={styles.actionBtnText}>Disable</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#2ecc71' }]}
+            style={[styles.actionBtn, { backgroundColor: '#111827' }]}
             onPress={() => enableUser(item.user_id, item.username)}
           >
             <Text style={styles.actionBtnText}>Enable</Text>
@@ -198,7 +196,7 @@ export default function UserManagement({ navigation }) {
         )}
 
         <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: '#3498db' }]}
+          style={[styles.actionBtn, { backgroundColor: '#374151' }]}
           onPress={() => changeUserRole(item.user_id, item.username, item.role)}
         >
           <Text style={styles.actionBtnText}>
@@ -207,7 +205,7 @@ export default function UserManagement({ navigation }) {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: '#95a5a6' }]}
+          style={[styles.actionBtn, { backgroundColor: '#dc2626' }]}
           onPress={() => deleteUser(item.user_id, item.username)}
         >
           <Text style={styles.actionBtnText}>Delete</Text>
@@ -246,92 +244,129 @@ export default function UserManagement({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ecf0f1',
+    backgroundColor: '#f4f5f7',
   },
+
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+
   listContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 30,
   },
+
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#7f8c8d',
+    color: '#6b7280',
   },
+
   emptyText: {
-    fontSize: 16,
-    color: '#95a5a6',
+    fontSize: 15,
+    color: '#9ca3af',
   },
+
   userCard: {
     backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#3498db',
+
+    borderRadius: 18,
+
+    padding: 18,
+
+    marginBottom: 14,
+
+    shadowColor: '#000',
+    shadowOpacity: 0.025,
+    shadowRadius: 4,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
     elevation: 2,
   },
+
   userHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+
+    marginBottom: 10,
   },
+
   username: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2c3e50',
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#111827',
   },
+
   email: {
     fontSize: 13,
-    color: '#7f8c8d',
+    color: '#6b7280',
     marginTop: 4,
   },
+
   roleBadge: {
-    backgroundColor: '#ecf0f1',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
+    backgroundColor: '#f3f4f6',
+
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+
+    borderRadius: 999,
   },
+
   roleText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
-    color: '#3498db',
+    color: '#111827',
+    textTransform: 'uppercase',
   },
+
   statusRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+
+    marginBottom: 10,
   },
+
   status: {
     fontSize: 12,
     fontWeight: '600',
   },
+
   fullName: {
-    fontSize: 12,
-    color: '#7f8c8d',
+    fontSize: 13,
+    color: '#4b5563',
   },
+
   lastLogin: {
     fontSize: 12,
-    color: '#95a5a6',
-    marginBottom: 10,
+    color: '#9ca3af',
+
+    marginBottom: 14,
   },
+
   actionButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 6,
+    gap: 8,
   },
+
   actionBtn: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 6,
+
+    paddingVertical: 10,
+
+    borderRadius: 12,
+
     alignItems: 'center',
+    justifyContent: 'center',
   },
+
   actionBtnText: {
     color: '#fff',
     fontSize: 12,

@@ -122,7 +122,7 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
       case 'turn_off':
         return '#F44336';
       case 'set_level':
-        return '#2196F3';
+        return '#111827';
       default:
         return '#999';
     }
@@ -176,7 +176,7 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#2196F3" />
+        <ActivityIndicator size="large" color="#111827" />
       </View>
     );
   }
@@ -184,7 +184,7 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>📋 Activity Logs</Text>
+        <Text style={styles.headerTitle}>Activity Logs</Text>
         <Text style={styles.headerSubtitle}>{device?.device_name || device?.name || 'Activity Logs'}</Text>
       </View>
 
@@ -194,7 +194,7 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
           style={styles.filterButton}
           onPress={() => setShowFilters(true)}
         >
-          <MaterialIcons name="filter-list" size={20} color="#2196F3" />
+          <MaterialIcons name="filter-list" size={20} color="#111827" />
           <Text style={styles.filterButtonText}>Filters</Text>
         </TouchableOpacity>
         {(searchText || actionFilter || triggeredByFilter || startDate || endDate) && (
@@ -217,7 +217,7 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>🔍 Filter Logs</Text>
+              <Text style={styles.modalTitle}>Filter Logs</Text>
               <TouchableOpacity onPress={() => setShowFilters(false)}>
                 <MaterialIcons name="close" size={28} color="#333" />
               </TouchableOpacity>
@@ -355,7 +355,7 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
               <SummaryItem
                 label="Total Actions"
                 value={summary.today_total_actions}
-                color="#2196F3"
+                color="#111827"
               />
             </View>
 
@@ -391,7 +391,7 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
             </>
           ) : (
             <View style={styles.emptyContainer}>
-              <MaterialIcons name="history" size={48} color="#CCC" />
+              <View style={styles.emptyCircle} />
               <Text style={styles.emptyText}>No activity logs</Text>
             </View>
           )}
@@ -416,15 +416,19 @@ const ActivityLogItem = ({ log }) => {
   const getTriggeredByIcon = (triggeredBy) => {
     switch (triggeredBy) {
       case 'user':
-        return '👤';
+        return 'User';
+
       case 'automation_rule':
-        return '🤖';
+        return 'Automation';
+
       case 'schedule':
-        return '⏰';
+        return 'Schedule';
+
       case 'mqtt':
-        return '☁️';
+        return 'Cloud';
+
       default:
-        return '❓';
+        return 'System';
     }
   };
 
@@ -435,7 +439,7 @@ const ActivityLogItem = ({ log }) => {
       case 'turn_off':
         return '#F44336';
       case 'set_level':
-        return '#2196F3';
+        return '#111827';
       default:
         return '#999';
     }
@@ -566,327 +570,448 @@ const DetailRow = ({ label, value }) => (
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f4f5f7',
   },
+
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+
   header: {
-    backgroundColor: '#2196F3',
-    paddingHorizontal: 16,
-    paddingVertical: 20,
-    paddingTop: 30,
+    backgroundColor: '#111827',
+    paddingHorizontal: 24,
+    paddingTop: 60,
+    paddingBottom: 28,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
   },
+
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 32,
+    fontWeight: '700',
     color: '#fff',
+    marginBottom: 8,
   },
+
   headerSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    marginTop: 4,
+    fontSize: 15,
+    color: '#d1d5db',
   },
+
+  filterBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+
+    backgroundColor: '#fff',
+
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+
+    borderRadius: 14,
+  },
+
+  filterButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+
+  clearButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+
+    backgroundColor: '#fff',
+
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+
+    borderRadius: 14,
+  },
+
+  clearButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#dc2626',
+  },
+
   content: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
   },
+
   summaryCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    elevation: 2,
+    borderRadius: 24,
+    padding: 22,
+    marginBottom: 20,
+
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
+    elevation: 2,
   },
+
   summaryTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
-  },
-  summaryGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEE',
-  },
-  summaryItem: {
-    alignItems: 'center',
-  },
-  summaryItemValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  summaryItemLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
-  },
-  lastActionContainer: {
-    marginTop: 8,
-  },
-  lastActionLabel: {
-    fontSize: 12,
-    color: '#999',
-    marginBottom: 4,
-  },
-  lastActionTime: {
-    fontSize: 12,
-    color: '#333',
-    fontWeight: '500',
-  },
-  lastActionReason: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
-  logsSection: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
     marginBottom: 20,
   },
-  logsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
+
+  summaryGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+
+    paddingBottom: 18,
+    marginBottom: 18,
+
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
   },
+
+  summaryItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+
+  summaryItemValue: {
+    fontSize: 30,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+
+  summaryItemLabel: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+
+  lastActionContainer: {
+    marginTop: 6,
+  },
+
+  lastActionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 8,
+  },
+
+  lastActionTime: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginBottom: 4,
+  },
+
+  lastActionReason: {
+    fontSize: 14,
+    color: '#374151',
+    lineHeight: 20,
+  },
+
+  logsSection: {
+    paddingBottom: 30,
+  },
+
+  logsTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 18,
+  },
+
   logItem: {
     backgroundColor: '#fff',
-    borderRadius: 8,
-    marginBottom: 8,
+    borderRadius: 20,
+    marginBottom: 14,
+
     overflow: 'hidden',
-    elevation: 1,
+
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
+    elevation: 2,
   },
+
   logItemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+
+    paddingHorizontal: 18,
+    paddingVertical: 18,
   },
+
   logItemLeft: {
     flex: 1,
   },
+
   logTime: {
     fontSize: 12,
-    color: '#999',
-    marginBottom: 4,
+    color: '#9ca3af',
+    marginBottom: 6,
   },
+
   logAction: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
   },
+
   logItemRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
+
   logTrigger: {
-    fontSize: 16,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#111827',
+
+    backgroundColor: '#f3f4f6',
+
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+
+    borderRadius: 999,
+    overflow: 'hidden',
   },
+
   logItemDetails: {
-    backgroundColor: '#F9F9F9',
+    backgroundColor: '#f9fafb',
     borderTopWidth: 1,
-    borderTopColor: '#EEE',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    borderTopColor: '#f3f4f6',
+
+    paddingHorizontal: 18,
+    paddingVertical: 18,
   },
+
   detailRow: {
-    flexDirection: 'row',
-    marginBottom: 8,
+    marginBottom: 14,
   },
+
   detailLabel: {
     fontSize: 12,
-    color: '#999',
-    fontWeight: '500',
-    minWidth: '35%',
+    color: '#9ca3af',
+    marginBottom: 4,
+    fontWeight: '600',
   },
+
   detailValue: {
-    fontSize: 12,
-    color: '#333',
-    flex: 1,
+    fontSize: 14,
+    color: '#111827',
+    lineHeight: 22,
   },
+
   emptyContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 60,
+    paddingVertical: 90,
   },
+
+  emptyCircle: {
+    width: 70,
+    height: 70,
+    borderRadius: 999,
+    backgroundColor: '#e5e7eb',
+    marginBottom: 18,
+  },
+
   emptyText: {
-    fontSize: 14,
-    color: '#999',
-    marginTop: 12,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
   },
+
   loadMoreButton: {
-    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingVertical: 16,
     alignItems: 'center',
-    marginTop: 12,
+    marginTop: 10,
   },
+
   loadMoreText: {
+    color: '#111827',
     fontSize: 14,
-    color: '#2196F3',
-    fontWeight: '600',
+    fontWeight: '700',
   },
-  // Filter styles
-  filterBar: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEE',
-    alignItems: 'center',
-    gap: 8,
-  },
-  filterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#E3F2FD',
-    gap: 6,
-  },
-  filterButtonText: {
-    fontSize: 14,
-    color: '#2196F3',
-    fontWeight: '600',
-  },
-  clearButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#FFEBEE',
-    gap: 6,
-  },
-  clearButtonText: {
-    fontSize: 14,
-    color: '#F44336',
-    fontWeight: '600',
-  },
+
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'flex-end',
   },
+
   modalContent: {
-    backgroundColor: '#FFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     maxHeight: '85%',
-    flexDirection: 'column',
   },
+
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+
+    paddingHorizontal: 22,
+    paddingVertical: 22,
+
     borderBottomWidth: 1,
-    borderBottomColor: '#EEE',
+    borderBottomColor: '#f3f4f6',
   },
+
   modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#111827',
   },
+
   modalBody: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 22,
+    paddingTop: 12,
   },
+
   filterLabel: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#333',
-    marginTop: 16,
-    marginBottom: 8,
+    color: '#111827',
+    marginTop: 18,
+    marginBottom: 10,
   },
+
   searchInput: {
     borderWidth: 1,
-    borderColor: '#DDD',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#333',
+    borderColor: '#e5e7eb',
+
+    backgroundColor: '#f9fafb',
+
+    borderRadius: 14,
+
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+
+    fontSize: 15,
+    color: '#111827',
   },
+
   dateInput: {
     borderWidth: 1,
-    borderColor: '#DDD',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#333',
+    borderColor: '#e5e7eb',
+
+    backgroundColor: '#f9fafb',
+
+    borderRadius: 14,
+
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+
+    fontSize: 15,
+    color: '#111827',
   },
+
   filterOptions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
   },
+
   filterOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+
+    borderRadius: 12,
+
     borderWidth: 1,
-    borderColor: '#DDD',
-    backgroundColor: '#F9F9F9',
+    borderColor: '#d1d5db',
+
+    backgroundColor: '#fff',
   },
+
   filterOptionActive: {
-    backgroundColor: '#2196F3',
-    borderColor: '#2196F3',
+    backgroundColor: '#111827',
+    borderColor: '#111827',
   },
+
   filterOptionText: {
     fontSize: 13,
-    color: '#666',
-    fontWeight: '500',
+    color: '#111827',
+    fontWeight: '600',
   },
+
   filterOptionTextActive: {
-    color: '#FFF',
+    color: '#fff',
   },
+
   modalFooter: {
     flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    gap: 12,
+
+    paddingHorizontal: 22,
+    paddingVertical: 22,
+
     borderTopWidth: 1,
-    borderTopColor: '#EEE',
-    backgroundColor: '#FAFAFA',
+    borderTopColor: '#f3f4f6',
   },
+
   cancelButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
+
     borderWidth: 1,
-    borderColor: '#2196F3',
+    borderColor: '#d1d5db',
+
+    borderRadius: 14,
+
+    paddingVertical: 14,
+
     alignItems: 'center',
   },
+
   cancelButtonText: {
-    color: '#2196F3',
+    color: '#111827',
     fontWeight: '600',
     fontSize: 14,
   },
+
   applyButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    backgroundColor: '#2196F3',
+
+    backgroundColor: '#111827',
+
+    borderRadius: 14,
+
+    paddingVertical: 14,
+
     alignItems: 'center',
   },
+
   applyButtonText: {
-    color: '#FFF',
-    fontWeight: '600',
+    color: '#fff',
+    fontWeight: '700',
     fontSize: 14,
   },
 });

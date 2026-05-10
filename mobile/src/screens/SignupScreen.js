@@ -60,7 +60,9 @@ export default function SignupScreen({ navigation }) {
       <View style={styles.container}>
         <View style={styles.card}>
           <Text style={styles.title}>Smart Home</Text>
-          <Text style={styles.subtitle}>Create Account</Text>
+          <Text style={styles.subtitle}>
+            Create your account to manage your smart home
+          </Text>
 
           <TextInput
             style={styles.input}
@@ -118,13 +120,15 @@ export default function SignupScreen({ navigation }) {
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>Sign Up</Text>
+              <Text style={styles.buttonText}>
+                Create Account
+              </Text>
             )}
           </TouchableOpacity>
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>Already have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Login')} disabled={loading}>
+            <TouchableOpacity onPress={() => navigation.push('Login')} disabled={loading}>
               <Text style={styles.linkText}>Login</Text>
             </TouchableOpacity>
           </View>
@@ -137,75 +141,103 @@ export default function SignupScreen({ navigation }) {
 const styles = StyleSheet.create({
   scrollContainer: {
     flexGrow: 1,
+    backgroundColor: '#f4f5f7',
     justifyContent: 'center',
-    backgroundColor: '#f5f5f5',
   },
+
   container: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 24,
   },
+
   card: {
     width: '100%',
+    maxWidth: 420,
+
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 24,
     padding: 24,
+
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+
     elevation: 3,
   },
+
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#007AFF',
-    marginBottom: 8,
+    fontSize: 40,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 10,
     textAlign: 'center',
   },
+
   subtitle: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 24,
+    fontSize: 15,
+    color: '#6b7280',
+    marginBottom: 28,
     textAlign: 'center',
+    lineHeight: 22,
   },
+
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    fontSize: 16,
-    backgroundColor: '#fafafa',
+    borderColor: '#e5e7eb',
+    borderRadius: 14,
+
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+
+    marginBottom: 14,
+
+    fontSize: 15,
+    color: '#111827',
+
+    backgroundColor: '#f9fafb',
   },
+
   button: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-    padding: 14,
-    marginTop: 16,
+    backgroundColor: '#111827',
+    borderRadius: 14,
+
+    paddingVertical: 15,
+
+    marginTop: 10,
     alignItems: 'center',
   },
+
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: 0.7,
   },
+
   buttonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '600',
   },
+
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 20,
+    marginTop: 24,
   },
+
   footerText: {
-    color: '#666',
+    color: '#6b7280',
     fontSize: 14,
   },
+
   linkText: {
-    color: '#007AFF',
+    color: '#111827',
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    marginLeft: 6,
   },
 });
