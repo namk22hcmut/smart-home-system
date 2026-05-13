@@ -1,140 +1,129 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Modal,
-  TextInput,
-  Switch,
   Alert,
+  TextInput,
+  Modal,
+  Switch,
   ActivityIndicator,
-  FlatList,
 } from 'react-native';
 import { useRoute } from '@react-navigation/native';
-import { AuthContext } from '../context/AuthContext';
-import { apiService } from '../services/api';
-import { MaterialIcons } from '@expo/vector-icons';
-import CustomSlider from '../components/CustomSlider';
+import apiService from '../services/api';
 
-const DeviceSchedulingScreen = ({ navigation }) => {
+const DeviceSchedulesScreen = ({ navigation }) => {
   const route = useRoute();
   const { device } = route.params || {};
-  const { token } = useContext(AuthContext);
-  
-  // Extract device ID with fallback
-  const deviceId = device?.device_id || device?.id;
 
   const [schedules, setSchedules] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [selectedSchedule, setSelectedSchedule] = useState(null);
-
-  // Form state
+  const [loading, setLoading] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState(null);
   const [formData, setFormData] = useState({
-    scheduled_time: '12:00',
+    scheduled_time: '08:00',
     action_status: 'on',
-    action_level: 50,
-    days_of_week: '0,1,2,3,4,5,6', // All days by default
+    action_level: 75,
+    duration_minutes: 0,
+    days_of_week: '0,1,2,3,4,5,6',
+    is_active: true,
   });
 
-  const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+  // Load schedules
   useEffect(() => {
-    if (device && deviceId) {
-      loadSchedules();
-    } else {
-      console.warn('❌ Device parameter missing or invalid:', device);
-      setLoading(false);
-      Alert.alert('Error', 'Device information not available');
-    }
-  }, [device, deviceId]);
+    loadSchedules();
+  }, [device]);
 
   const loadSchedules = async () => {
     try {
       setLoading(true);
       const response = await apiService.get(
-        `/devices/${deviceId}/schedules`,
-        token
+        `/devices/${device.device_id}/schedules`
       );
-      if (response.success) {
+      if (response.success && response.schedules) {
         setSchedules(response.schedules);
       }
     } catch (error) {
-      console.error('Error loading schedules:', error);
+      console.log('[SCHEDULE-LOAD] Error:', error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAddSchedule = async () => {
+  const handleCreateSchedule = async () => {
     try {
-      if (!formData.scheduled_time || !formData.action_status) {
-        Alert.alert('Error', 'Please fill in all fields');
+      if (!formData.scheduled_time) {
+        Alert.alert('Error', 'Please enter scheduled time');
         return;
       }
 
       const response = await apiService.post(
-        `/devices/${deviceId}/schedules`,
-        formData,
-        token
+        `/devices/${device.device_id}/schedules`,
+        formData
       );
 
       if (response.success) {
-        Alert.alert('Success', 'Schedule created successfully');
-        setShowModal(false);
-        resetForm();
+        Alert.alert('Success', response.message || 'Schedule created');
+        setModalVisible(false);
+        setFormData({
+          scheduled_time: '08:00',
+          action_status: 'on',
+          action_level: 75,
+          duration_minutes: 0,
+          days_of_week: '0,1,2,3,4,5,6',
+          is_active: true,
+        });
         loadSchedules();
       } else {
         Alert.alert('Error', response.error || 'Failed to create schedule');
       }
     } catch (error) {
-      Alert.alert('Error', error.message);
+      console.log('[SCHEDULE-CREATE] Error:', error.message);
+      Alert.alert('Error', error.message || 'Failed to create schedule');
     }
   };
 
-  const handleUpdateSchedule = async (scheduleId) => {
+  const handleUpdateSchedule = async () => {
     try {
+      if (!editingSchedule) return;
+
+      const updateData = { ...formData };
       const response = await apiService.put(
-        `/schedules/${scheduleId}`,
-        formData,
-        token
+        `/schedules/${editingSchedule.schedule_id}`,
+        updateData
       );
 
       if (response.success) {
-        Alert.alert('Success', 'Schedule updated successfully');
-        setShowModal(false);
-        setSelectedSchedule(null);
-        resetForm();
+        Alert.alert('Success', 'Schedule updated');
+        setModalVisible(false);
+        setEditingSchedule(null);
         loadSchedules();
       } else {
         Alert.alert('Error', response.error || 'Failed to update schedule');
       }
     } catch (error) {
-      Alert.alert('Error', error.message);
+      console.log('[SCHEDULE-UPDATE] Error:', error.message);
+      Alert.alert('Error', error.message || 'Failed to update schedule');
     }
   };
 
-  const handleDeleteSchedule = (scheduleId, scheduleName) => {
+  const handleDeleteSchedule = (schedule) => {
     Alert.alert(
-      'Confirm Delete',
+      'Delete Schedule',
       `Are you sure you want to delete this schedule?`,
       [
-        {
-          text: 'Cancel',
-          onPress: () => { },
-          style: 'cancel',
-        },
+        { text: 'Cancel', onPress: () => {} },
         {
           text: 'Delete',
           onPress: async () => {
             try {
               const response = await apiService.delete(
-                `/schedules/${scheduleId}`,
-                token
+                `/schedules/${schedule.schedule_id}`
               );
-
               if (response.success) {
                 Alert.alert('Success', 'Schedule deleted');
                 loadSchedules();
@@ -142,7 +131,7 @@ const DeviceSchedulingScreen = ({ navigation }) => {
                 Alert.alert('Error', response.error || 'Failed to delete');
               }
             } catch (error) {
-              Alert.alert('Error', error.message);
+              Alert.alert('Error', error.message || 'Failed to delete');
             }
           },
           style: 'destructive',
@@ -152,28 +141,20 @@ const DeviceSchedulingScreen = ({ navigation }) => {
   };
 
   const handleEditSchedule = (schedule) => {
-    setSelectedSchedule(schedule);
+    setEditingSchedule(schedule);
     setFormData({
-      scheduled_time: schedule.scheduled_time.substring(0, 5),
-      action_status: schedule.action_status,
-      action_level: schedule.action_level || 50,
-      days_of_week: schedule.days_of_week,
+      scheduled_time: schedule.scheduled_time || '08:00',
+      action_status: schedule.action_status || 'on',
+      action_level: schedule.action_level || 0,
+      duration_minutes: schedule.duration_minutes || 0,
+      days_of_week: schedule.days_of_week || '0,1,2,3,4,5,6',
+      is_active: schedule.is_active !== false,
     });
-    setShowModal(true);
-  };
-
-  const resetForm = () => {
-    setFormData({
-      scheduled_time: '12:00',
-      action_status: 'on',
-      action_level: 50,
-      days_of_week: '0,1,2,3,4,5,6',
-    });
-    setSelectedSchedule(null);
+    setModalVisible(true);
   };
 
   const toggleDay = (dayIndex) => {
-    const days = formData.days_of_week.split(',').map(d => parseInt(d));
+    const days = formData.days_of_week.split(',').map(Number);
     const index = days.indexOf(dayIndex);
 
     if (index > -1) {
@@ -182,211 +163,349 @@ const DeviceSchedulingScreen = ({ navigation }) => {
       days.push(dayIndex);
     }
 
-    days.sort();
+    days.sort((a, b) => a - b);
     setFormData({
       ...formData,
       days_of_week: days.join(','),
     });
   };
 
-  const getSelectedDays = () => {
-    return formData.days_of_week.split(',').map(d => parseInt(d));
+  const getDaySelection = () => {
+    return formData.days_of_week.split(',').map(Number);
   };
-
-  if (loading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#FF9800" />
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>⏰ Device Schedule</Text>
-        <Text style={styles.headerSubtitle}>{device?.device_name || device?.name || 'Device Scheduling'}</Text>
+        <Text style={styles.headerTitle}>
+          📅 Schedules for {device?.device_name}
+        </Text>
       </View>
 
-      <ScrollView style={styles.content}>
-        {schedules.length > 0 ? (
-          schedules.map((schedule) => (
-            <ScheduleCard
-              key={schedule.schedule_id}
-              schedule={schedule}
-              onEdit={() => handleEditSchedule(schedule)}
-              onDelete={() =>
-                handleDeleteSchedule(
-                  schedule.schedule_id,
-                  schedule.scheduled_time
-                )
-              }
-            />
-          ))
-        ) : (
-          <View style={styles.emptyContainer}>
-            <MaterialIcons name="schedule" size={48} color="#CCC" />
-            <Text style={styles.emptyText}>No schedules set</Text>
-            <Text style={styles.emptySubtext}>
-              Create a schedule to automate your device
-            </Text>
-          </View>
-        )}
-      </ScrollView>
-
+      {/* Add Schedule Button */}
       <TouchableOpacity
-        style={styles.fab}
+        style={styles.addButton}
         onPress={() => {
-          resetForm();
-          setShowModal(true);
+          setEditingSchedule(null);
+          setFormData({
+            scheduled_time: '08:00',
+            action_status: 'on',
+            action_level: 75,
+            duration_minutes: 0,
+            days_of_week: '0,1,2,3,4,5,6',
+            is_active: true,
+          });
+          setModalVisible(true);
         }}
       >
-        <MaterialIcons name="add" size={24} color="#fff" />
+        <Text style={styles.addButtonText}>+ Add Schedule</Text>
       </TouchableOpacity>
 
-      {/* Modal */}
-      <Modal
-        visible={showModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => {
-          setShowModal(false);
-          resetForm();
-        }}
-      >
+      {/* Schedules List */}
+      {loading ? (
+        <ActivityIndicator size="large" color="#2196F3" style={styles.loader} />
+      ) : schedules.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyText}>📋 No schedules yet</Text>
+          <Text style={styles.emptySubtext}>
+            Create one to automate this device
+          </Text>
+        </View>
+      ) : (
+        <ScrollView style={styles.schedulesList}>
+          {schedules.map((schedule) => (
+            <View key={schedule.schedule_id} style={styles.scheduleCard}>
+              <View style={styles.scheduleInfo}>
+                <View style={styles.timeRow}>
+                  <Text style={styles.scheduleTime}>
+                    ⏰ {schedule.scheduled_time}
+                  </Text>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      schedule.action_status === 'on'
+                        ? styles.statusOn
+                        : styles.statusOff,
+                    ]}
+                  >
+                    <Text style={styles.statusText}>
+                      {schedule.action_status.toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.detailsRow}>
+                  <Text style={styles.detail}>
+                    💡 Level: {schedule.action_level}%
+                  </Text>
+                  <Text style={styles.detail}>
+                    ⏱️ Duration:{' '}
+                    {schedule.duration_minutes === 0
+                      ? '∞'
+                      : `${schedule.duration_minutes}m`}
+                  </Text>
+                </View>
+
+                <View style={styles.daysRow}>
+                  {dayLabels.map((day, index) => (
+                    <View
+                      key={index}
+                      style={[
+                        styles.dayBadge,
+                        schedule.days_of_week
+                          ?.split(',')
+                          .includes(index.toString())
+                          ? styles.dayActive
+                          : styles.dayInactive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.dayText,
+                          schedule.days_of_week
+                            ?.split(',')
+                            .includes(index.toString())
+                            ? styles.dayTextActive
+                            : styles.dayTextInactive,
+                        ]}
+                      >
+                        {day}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+
+                <Text
+                  style={[
+                    styles.activeStatus,
+                    schedule.is_active ? styles.activeYes : styles.activeNo,
+                  ]}
+                >
+                  {schedule.is_active ? '✓ Active' : '✗ Inactive'}
+                </Text>
+              </View>
+
+              <View style={styles.actions}>
+                <TouchableOpacity
+                  style={styles.editButton}
+                  onPress={() => handleEditSchedule(schedule)}
+                >
+                  <Text style={styles.actionButtonText}>✏️ Edit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={() => handleDeleteSchedule(schedule)}
+                >
+                  <Text style={styles.actionButtonText}>🗑️ Delete</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+
+      {/* Create/Edit Schedule Modal */}
+      <Modal visible={modalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <View style={styles.modal}>
+          <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {selectedSchedule ? 'Edit Schedule' : 'Create Schedule'}
+                {editingSchedule ? '✏️ Edit Schedule' : '➕ Create Schedule'}
               </Text>
               <TouchableOpacity
-                onPress={() => {
-                  setShowModal(false);
-                  resetForm();
-                }}
+                onPress={() => setModalVisible(false)}
+                style={styles.closeButton}
               >
-                <MaterialIcons name="close" size={24} color="#333" />
+                <Text style={styles.closeButtonText}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalContent}>
+            <ScrollView style={styles.modalBody}>
               {/* Time Input */}
-              <Text style={styles.fieldLabel}>Scheduled Time ⏰</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="HH:MM"
-                value={formData.scheduled_time}
-                onChangeText={(text) =>
-                  setFormData({ ...formData, scheduled_time: text })
-                }
-                maxLength={5}
-              />
-
-              {/* Action Status */}
-              <Text style={styles.fieldLabel}>Action 🎛️</Text>
-              <View style={styles.statusButtons}>
-                <TouchableOpacity
-                  style={[
-                    styles.statusButton,
-                    formData.action_status === 'on' && styles.statusButtonActive,
-                  ]}
-                  onPress={() =>
-                    setFormData({ ...formData, action_status: 'on' })
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Scheduled Time</Text>
+                <TextInput
+                  style={styles.timeInput}
+                  placeholder="HH:MM"
+                  value={formData.scheduled_time}
+                  onChangeText={(text) =>
+                    setFormData({ ...formData, scheduled_time: text })
                   }
-                >
-                  <Text
-                    style={[
-                      styles.statusButtonText,
-                      formData.action_status === 'on' &&
-                      styles.statusButtonTextActive,
-                    ]}
-                  >
-                    Turn ON
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.statusButton,
-                    formData.action_status === 'off' && styles.statusButtonActive,
-                  ]}
-                  onPress={() =>
-                    setFormData({ ...formData, action_status: 'off' })
-                  }
-                >
-                  <Text
-                    style={[
-                      styles.statusButtonText,
-                      formData.action_status === 'off' &&
-                      styles.statusButtonTextActive,
-                    ]}
-                  >
-                    Turn OFF
-                  </Text>
-                </TouchableOpacity>
+                />
+                <Text style={styles.hint}>Example: 08:30 (24-hour format)</Text>
               </View>
 
-              {/* Level Slider (only if ON) */}
-              {formData.action_status === 'on' && (
-                <>
-                  <Text style={styles.fieldLabel}>
-                    Device Level: {formData.action_level}%
-                  </Text>
-                  <CustomSlider
-                    min={0}
-                    max={100}
-                    value={formData.action_level}
-                    onChange={(value) =>
-                      setFormData({ ...formData, action_level: Math.round(value) })
-                    }
-                    style={styles.slider}
-                  />
-                </>
-              )}
-
-              {/* Days of Week */}
-              <Text style={styles.fieldLabel}>Repeat On 📅</Text>
-              <View style={styles.daysGrid}>
-                {DAYS_OF_WEEK.map((day, index) => (
+              {/* Action Status */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Action</Text>
+                <View style={styles.segmentButtons}>
                   <TouchableOpacity
-                    key={index}
                     style={[
-                      styles.dayButton,
-                      getSelectedDays().includes(index) &&
-                      styles.dayButtonActive,
+                      styles.segment,
+                      formData.action_status === 'on' && styles.segmentActive,
                     ]}
-                    onPress={() => toggleDay(index)}
+                    onPress={() =>
+                      setFormData({ ...formData, action_status: 'on' })
+                    }
                   >
                     <Text
                       style={[
-                        styles.dayButtonText,
-                        getSelectedDays().includes(index) &&
-                        styles.dayButtonTextActive,
+                        styles.segmentText,
+                        formData.action_status === 'on' &&
+                          styles.segmentTextActive,
                       ]}
                     >
-                      {day}
+                      Turn ON
                     </Text>
                   </TouchableOpacity>
-                ))}
+                  <TouchableOpacity
+                    style={[
+                      styles.segment,
+                      formData.action_status === 'off' && styles.segmentActive,
+                    ]}
+                    onPress={() =>
+                      setFormData({ ...formData, action_status: 'off' })
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.segmentText,
+                        formData.action_status === 'off' &&
+                          styles.segmentTextActive,
+                      ]}
+                    >
+                      Turn OFF
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
-              {/* Save Button */}
+              {/* Action Level */}
+              {formData.action_status === 'on' && (
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>
+                    Level: {formData.action_level}%
+                  </Text>
+                  <View style={styles.levelInputGroup}>
+                    <TouchableOpacity
+                      onPress={() =>
+                        setFormData({
+                          ...formData,
+                          action_level: Math.max(0, formData.action_level - 10),
+                        })
+                      }
+                    >
+                      <Text style={styles.levelButton}>−</Text>
+                    </TouchableOpacity>
+                    <TextInput
+                      style={styles.levelInput}
+                      placeholder="0"
+                      value={formData.action_level.toString()}
+                      onChangeText={(text) =>
+                        setFormData({
+                          ...formData,
+                          action_level: Math.max(
+                            0,
+                            Math.min(100, parseInt(text) || 0)
+                          ),
+                        })
+                      }
+                      keyboardType="number-pad"
+                    />
+                    <TouchableOpacity
+                      onPress={() =>
+                        setFormData({
+                          ...formData,
+                          action_level: Math.min(100, formData.action_level + 10),
+                        })
+                      }
+                    >
+                      <Text style={styles.levelButton}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {/* Duration */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Duration (minutes)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="0 for forever"
+                  value={formData.duration_minutes.toString()}
+                  onChangeText={(text) =>
+                    setFormData({
+                      ...formData,
+                      duration_minutes: parseInt(text) || 0,
+                    })
+                  }
+                  keyboardType="number-pad"
+                />
+                <Text style={styles.hint}>0 = device stays on, 30 = 30 minutes</Text>
+              </View>
+
+              {/* Days of Week */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Days of Week</Text>
+                <View style={styles.daysGrid}>
+                  {dayLabels.map((day, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={[
+                        styles.dayToggle,
+                        getDaySelection().includes(index) &&
+                          styles.dayToggleActive,
+                      ]}
+                      onPress={() => toggleDay(index)}
+                    >
+                      <Text
+                        style={[
+                          styles.dayToggleText,
+                          getDaySelection().includes(index) &&
+                            styles.dayToggleTextActive,
+                        ]}
+                      >
+                        {day}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Active Switch */}
+              <View style={styles.formGroup}>
+                <View style={styles.switchRow}>
+                  <Text style={styles.formLabel}>Enable Schedule</Text>
+                  <Switch
+                    value={formData.is_active}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, is_active: value })
+                    }
+                  />
+                </View>
+              </View>
+            </ScrollView>
+
+            {/* Modal Footer */}
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.saveButton}
-                onPress={() => {
-                  if (selectedSchedule) {
-                    handleUpdateSchedule(selectedSchedule.schedule_id);
-                  } else {
-                    handleAddSchedule();
-                  }
-                }}
+                onPress={
+                  editingSchedule ? handleUpdateSchedule : handleCreateSchedule
+                }
               >
                 <Text style={styles.saveButtonText}>
-                  {selectedSchedule ? 'Update Schedule' : 'Create Schedule'}
+                  {editingSchedule ? 'Update' : 'Create'}
                 </Text>
               </TouchableOpacity>
-            </ScrollView>
+            </View>
           </View>
         </View>
       </Modal>
@@ -394,249 +513,345 @@ const DeviceSchedulingScreen = ({ navigation }) => {
   );
 };
 
-// Schedule Card Component
-const ScheduleCard = ({ schedule, onEdit, onDelete }) => {
-  const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const selectedDays = schedule.days_of_week
-    .split(',')
-    .map((d) => DAYS_OF_WEEK[parseInt(d)])
-    .join(', ');
-
-  return (
-    <View style={styles.scheduleCard}>
-      <View style={styles.scheduleCardTop}>
-        <View>
-          <Text style={styles.scheduleTime}>{schedule.scheduled_time}</Text>
-          <Text style={styles.scheduleAction}>
-            {schedule.action_status === 'on' ? '✓ Turn ON' : '✗ Turn OFF'}
-            {schedule.action_status === 'on' && ` @ ${schedule.action_level}%`}
-          </Text>
-        </View>
-        <View style={styles.scheduleActions}>
-          <TouchableOpacity onPress={onEdit} style={styles.actionButton}>
-            <MaterialIcons name="edit" size={20} color="#FF9800" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onDelete} style={styles.actionButton}>
-            <MaterialIcons name="delete" size={20} color="#F44336" />
-          </TouchableOpacity>
-        </View>
-      </View>
-      <Text style={styles.scheduleDays}>{selectedDays}</Text>
-    </View>
-  );
-};
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
   },
   header: {
-    backgroundColor: '#FF9800',
-    paddingHorizontal: 16,
-    paddingVertical: 20,
-    paddingTop: 30,
+    backgroundColor: '#2196F3',
+    padding: 15,
+    paddingTop: 20,
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: 'white',
   },
-  headerSubtitle: {
+  addButton: {
+    backgroundColor: '#4CAF50',
+    margin: 12,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  addButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
     fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    marginTop: 4,
   },
-  content: {
+  schedulesList: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
   },
   scheduleCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: 'white',
+    borderRadius: 8,
+    marginVertical: 6,
+    padding: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#2196F3',
     elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
   },
-  scheduleCardTop: {
+  scheduleInfo: {
+    marginBottom: 12,
+  },
+  timeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
   },
   scheduleTime: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: 'bold',
-    color: '#FF9800',
+    color: '#333',
   },
-  scheduleAction: {
-    fontSize: 14,
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  statusOn: {
+    backgroundColor: '#4CAF50',
+  },
+  statusOff: {
+    backgroundColor: '#f44336',
+  },
+  statusText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  detailsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  detail: {
+    fontSize: 12,
     color: '#666',
+  },
+  daysRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  dayBadge: {
+    width: '12%',
+    paddingVertical: 6,
+    alignItems: 'center',
+    borderRadius: 4,
+  },
+  dayActive: {
+    backgroundColor: '#2196F3',
+  },
+  dayInactive: {
+    backgroundColor: '#e0e0e0',
+  },
+  dayText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  dayTextActive: {
+    color: 'white',
+  },
+  dayTextInactive: {
+    color: '#999',
+  },
+  activeStatus: {
+    fontSize: 12,
+    fontWeight: '600',
     marginTop: 4,
   },
-  scheduleActions: {
+  activeYes: {
+    color: '#4CAF50',
+  },
+  activeNo: {
+    color: '#f44336',
+  },
+  actions: {
     flexDirection: 'row',
-    gap: 8,
+    justifyContent: 'flex-end',
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    paddingTop: 10,
   },
-  actionButton: {
-    padding: 8,
+  editButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#2196F3',
+    borderRadius: 4,
+    marginRight: 8,
   },
-  scheduleDays: {
+  deleteButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#f44336',
+    borderRadius: 4,
+  },
+  actionButtonText: {
+    color: 'white',
     fontSize: 12,
-    color: '#999',
-    marginTop: 8,
+    fontWeight: '600',
   },
-  emptyContainer: {
+  emptyState: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 60,
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '600',
     color: '#999',
-    marginTop: 12,
+    marginBottom: 8,
   },
   emptySubtext: {
-    fontSize: 12,
-    color: '#CCC',
-    marginTop: 4,
+    fontSize: 14,
+    color: '#bbb',
   },
-  fab: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#FF9800',
+  loader: {
+    flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 8,
   },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
-  modal: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+  modalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     maxHeight: '90%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#EEE',
+    borderBottomColor: '#eee',
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
   },
-  modalContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+  closeButton: {
+    padding: 8,
   },
-  fieldLabel: {
+  closeButtonText: {
+    fontSize: 20,
+    color: '#999',
+  },
+  modalBody: {
+    padding: 16,
+    maxHeight: '70%',
+  },
+  formGroup: {
+    marginBottom: 16,
+  },
+  formLabel: {
     fontSize: 14,
     fontWeight: '600',
     color: '#333',
     marginBottom: 8,
-    marginTop: 12,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#DDD',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderColor: '#ddd',
+    borderRadius: 6,
+    padding: 10,
     fontSize: 14,
-    marginBottom: 12,
+    backgroundColor: '#f9f9f9',
   },
-  statusButtons: {
+  timeInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 6,
+    padding: 10,
+    fontSize: 16,
+    backgroundColor: '#f9f9f9',
+    fontWeight: 'bold',
+  },
+  hint: {
+    fontSize: 11,
+    color: '#999',
+    marginTop: 4,
+  },
+  segmentButtons: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 6,
+    overflow: 'hidden',
   },
-  statusButton: {
+  segment: {
     flex: 1,
     paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#FF9800',
     alignItems: 'center',
+    backgroundColor: '#f9f9f9',
   },
-  statusButtonActive: {
-    backgroundColor: '#FF9800',
+  segmentActive: {
+    backgroundColor: '#2196F3',
   },
-  statusButtonText: {
+  segmentText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#666',
+  },
+  segmentTextActive: {
+    color: 'white',
+  },
+  levelInputGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  levelButton: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2196F3',
+    width: 40,
+    textAlign: 'center',
+    paddingVertical: 8,
+    backgroundColor: '#f9f9f9',
+  },
+  levelInput: {
+    flex: 1,
+    textAlign: 'center',
     fontSize: 14,
-    fontWeight: '500',
-    color: '#FF9800',
-  },
-  statusButtonTextActive: {
-    color: '#fff',
-  },
-  slider: {
-    width: '100%',
-    height: 40,
-    marginBottom: 12,
+    padding: 10,
+    backgroundColor: 'white',
   },
   daysGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 8,
-    marginBottom: 12,
+    flexWrap: 'wrap',
   },
-  dayButton: {
-    width: '30%',
+  dayToggle: {
+    width: '14%',
     paddingVertical: 10,
-    borderRadius: 8,
+    alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#FF9800',
+    borderColor: '#ddd',
+    borderRadius: 6,
+    marginBottom: 8,
+    backgroundColor: '#f9f9f9',
+  },
+  dayToggleActive: {
+    backgroundColor: '#2196F3',
+    borderColor: '#2196F3',
+  },
+  dayToggleText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+  },
+  dayToggleTextActive: {
+    color: 'white',
+  },
+  switchRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  dayButtonActive: {
-    backgroundColor: '#FF9800',
+  modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
   },
-  dayButtonText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#FF9800',
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    marginRight: 8,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 6,
+    alignItems: 'center',
   },
-  dayButtonTextActive: {
-    color: '#fff',
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
   },
   saveButton: {
-    backgroundColor: '#FF9800',
-    borderRadius: 8,
-    paddingVertical: 14,
+    flex: 1,
+    paddingVertical: 12,
+    backgroundColor: '#4CAF50',
+    borderRadius: 6,
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 20,
   },
   saveButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'white',
   },
 });
 
-export default DeviceSchedulingScreen;
+export default DeviceSchedulesScreen;

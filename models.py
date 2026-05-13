@@ -378,13 +378,16 @@ class Schedule(db.Model):
     device_id = db.Column(db.Integer, db.ForeignKey('device.device_id'), nullable=False)
     scheduled_time = db.Column(db.Time, nullable=False)
     action_status = db.Column(db.String(20))  # on, off
-    action_level = db.Column(db.Integer)  # level  to set (0-100)
+    action_level = db.Column(db.Integer)  # level to set (0-100)
+    duration_minutes = db.Column(db.Integer, default=0)  # How long device should run (0 = forever)
     days_of_week = db.Column(db.String(50))  # 0-6, comma separated
     is_active = db.Column(db.Boolean, default=True)
+    last_triggered_at = db.Column(db.DateTime)  # Track last execution to prevent duplicate triggers
+    auto_off_at = db.Column(db.DateTime)  # When device should auto-off (calculated from duration)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def __repr__(self):
-        return f'<Schedule device_id={self.device_id}>'
+        return f'<Schedule device_id={self.device_id} time={self.scheduled_time} duration={self.duration_minutes}m>'
 
 
 # =====================================================
@@ -648,8 +651,8 @@ class AdafruitFeedMapping(db.Model):
     
     mapping_id = db.Column(db.Integer, primary_key=True)
     
-    # Adafruit feed key (e.g., "temperature-sensor-1") - used in MQTT topic
-    feed_key = db.Column(db.String(255), unique=True, nullable=False)
+    # Adafruit feed key (e.g., "temperature") - multiple sensors/devices can map to same feed
+    feed_key = db.Column(db.String(255), nullable=False)
     
     # Custom feed name for internal organization (e.g., "home/1/2/5/temperature")
     feed_name = db.Column(db.String(255), nullable=True)

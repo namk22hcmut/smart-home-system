@@ -19,6 +19,7 @@ import HousesScreen from './src/screens/HousesScreen';
 import FloorsScreen from './src/screens/FloorsScreen';
 import RoomsScreen from './src/screens/RoomsScreen';
 import DevicesScreen from './src/screens/DevicesScreen';
+import SensorsScreen from './src/screens/SensorsScreen';
 import NotificationCenter from './src/screens/NotificationCenter';
 import AutomationRulesScreen from './src/screens/AutomationRulesScreen';
 
@@ -97,7 +98,14 @@ function UserStack() {
         })}
       />
       <Stack.Screen 
-        name="AutomationRules" 
+        name="UserSensors" 
+        component={SensorsScreen}
+        options={({ route }) => ({
+          title: route.params?.roomName || 'Sensors',
+        })}
+      />
+      <Stack.Screen 
+        name="AutomationRules"
         component={AutomationRulesScreen}
         options={({ route }) => ({
           title: `${route.params?.roomName || 'Room'} - Automation`,

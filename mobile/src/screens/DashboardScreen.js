@@ -15,6 +15,7 @@ import {
 import { useRoute } from '@react-navigation/native';
 import { AuthContext } from '../context/AuthContext';
 import { apiService } from '../services/api';
+import adafruitService from '../services/adafruit';
 import realtimeService from '../services/realtime';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LineChart, BarChart } from 'react-native-chart-kit';
@@ -33,6 +34,13 @@ const DashboardScreen = ({ navigation }) => {
   const [stats, setStats] = useState(null);
   const [activities, setActivities] = useState([]);
   const [sensorChartData, setSensorChartData] = useState(null);
+  const [deviceUsage, setDeviceUsage] = useState([]);
+  
+  // Adafruit Sensor Data for Visualization
+  const [adafruitSensors, setAdafruitSensors] = useState([]);
+  const [selectedSensorForChart, setSelectedSensorForChart] = useState(null);
+  const [sensorChartDataAdafruit, setSensorChartDataAdafruit] = useState({});
+  const [loadingAdafruitData, setLoadingAdafruitData] = useState(false);
   
   // Filter & Sort
   const [filterType, setFilterType] = useState('all'); // all, turn_on, turn_off, set_level
@@ -199,6 +207,12 @@ const DashboardScreen = ({ navigation }) => {
         setStats(statsResponse.stats);
       }
 
+      // Get device usage data
+      const usageResponse = await apiService.get(`/houses/${houseId}/device-usage?period=today`);
+      if (usageResponse.success) {
+        setDeviceUsage(usageResponse.devices || []);
+      }
+
       // Get activities with filters
       const startDate = getDateRangeQuery();
       const activitiesResponse = await apiService.get(
@@ -214,10 +228,103 @@ const DashboardScreen = ({ navigation }) => {
 
       // Generate chart data from activities
       generateChartData(activitiesResponse.logs || []);
+      
+      // 📌 REMOVED: Auto-fetch Adafruit sensor data
+      // Now: Only fetch on-demand (user clicks sensor tab or refresh)
+      // await loadAdafruitSensorData();
     } catch (error) {
       console.error('❌ Error loading dashboard:', error);
     } finally {
       if (showLoader) setLoading(false);
+    }
+  };
+
+  // Load Adafruit sensor data for the selected house (ON-DEMAND ONLY)
+  // Called when:
+  //   1. User clicks 🔄 refresh button
+  //   2. Real-time Socket.IO update from server
+  // Never called automatically on mount/filter change!
+  const loadAdafruitSensorData = async () => {
+    setLoadingAdafruitData(true);
+    try {
+      // Fetch both temperature and humidity from Adafruit
+      const sensorData = await adafruitService.getAllSensorData();
+      
+      if (sensorData.success) {
+        // Setup sensors list
+        const sensors = [];
+        
+        if (sensorData.temperature?.success) {
+          sensors.push({
+            name: 'Temperature',
+            feed_key: 'temperature',
+            latestValue: sensorData.temperature.latestValue,
+            chartData: sensorData.temperature.chartData,
+          });
+        }
+        
+        if (sensorData.humidity?.success) {
+          sensors.push({
+            name: 'Humidity',
+            feed_key: 'humidity',
+            latestValue: sensorData.humidity.latestValue,
+            chartData: sensorData.humidity.chartData,
+          });
+        }
+        
+        setAdafruitSensors(sensors);
+        
+        // Setup chart data
+        const chartDataMap = {};
+        if (sensorData.temperature?.chartData) {
+          chartDataMap['temperature'] = sensorData.temperature.chartData;
+        }
+        if (sensorData.humidity?.chartData) {
+          chartDataMap['humidity'] = sensorData.humidity.chartData;
+        }
+        setSensorChartDataAdafruit(chartDataMap);
+        
+        // Select first sensor for display
+        if (sensors.length > 0) {
+          setSelectedSensorForChart(sensors[0]);
+        }
+        
+        console.log(`✅ Loaded ${sensors.length} sensors from Adafruit`);
+      }
+    } catch (error) {
+      console.error('❌ Error loading Adafruit data:', error.message);
+    } finally {
+      setLoadingAdafruitData(false);
+    }
+  };
+
+  // Update chart when different sensor is selected
+  const handleSensorSelection = async (sensor) => {
+    setSelectedSensorForChart(sensor);
+    
+    // If chart data not loaded yet, fetch it
+    if (!sensorChartDataAdafruit[sensor.feed_key]) {
+      try {
+        if (sensor.feed_key === 'temperature') {
+          const result = await adafruitService.getTemperatureData(48);
+          if (result.success) {
+            setSensorChartDataAdafruit(prev => ({
+              ...prev,
+              [sensor.feed_key]: result.chartData,
+            }));
+          }
+        } else if (sensor.feed_key === 'humidity') {
+          const result = await adafruitService.getHumidityData(48);
+          if (result.success) {
+            setSensorChartDataAdafruit(prev => ({
+              ...prev,
+              [sensor.feed_key]: result.chartData,
+            }));
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error loading chart data:', error.message);
+      }
     }
   };
 
@@ -453,6 +560,116 @@ const DashboardScreen = ({ navigation }) => {
                 />
               </View>
             </View>
+
+            {/* Device Usage Today */}
+            {deviceUsage.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>⏱️ Device Usage Today</Text>
+                
+                <View style={styles.usageList}>
+                  {deviceUsage.map((device, idx) => (
+                    <View key={idx} style={styles.usageItem}>
+                      <View style={styles.usageLeft}>
+                        <Text style={styles.usageDeviceName}>{device.device_name}</Text>
+                        <Text style={styles.usageDeviceType}>{device.device_type}</Text>
+                      </View>
+                      <View style={styles.usageRight}>
+                        <Text style={[
+                          styles.usageTime,
+                          device.status === 'on' && styles.usageTimeActive
+                        ]}>
+                          {device.usage_display}
+                        </Text>
+                        <Text style={[
+                          styles.usageStatus,
+                          device.status === 'on' ? styles.statusOn : styles.statusOff
+                        ]}>
+                          {device.status === 'on' ? '● On' : '● Off'}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Adafruit Sensor Data Visualization */}
+            {adafruitSensors.length > 0 && (
+              <View style={styles.section}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={styles.sectionTitle}>📡 Live Sensor Trends</Text>
+                  <TouchableOpacity 
+                    onPress={loadAdafruitSensorData}
+                    disabled={loadingAdafruitData}
+                    style={{ padding: 8 }}
+                  >
+                    <Text style={{ fontSize: 18 }}>🔄</Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {/* Sensor Selection */}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.sensorSelector}
+                >
+                  {adafruitSensors.map((sensor, idx) => (
+                    <TouchableOpacity
+                      key={idx}
+                      style={[
+                        styles.sensorTab,
+                        selectedSensorForChart?.feed_key === sensor.feed_key &&
+                          styles.sensorTabActive,
+                      ]}
+                      onPress={() => handleSensorSelection(sensor)}
+                    >
+                      <Text
+                        style={[
+                          styles.sensorTabText,
+                          selectedSensorForChart?.feed_key === sensor.feed_key &&
+                            styles.sensorTabTextActive,
+                        ]}
+                      >
+                        {sensor.feed_name?.split('/').pop() || sensor.feed_key}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+
+                {/* Chart */}
+                {selectedSensorForChart && sensorChartDataAdafruit[selectedSensorForChart.feed_key] && (
+                  <View style={styles.chartContainer}>
+                    <LineChart
+                      data={{
+                        labels: sensorChartDataAdafruit[selectedSensorForChart.feed_key].labels,
+                        datasets: [
+                          {
+                            data: sensorChartDataAdafruit[selectedSensorForChart.feed_key].values,
+                          },
+                        ],
+                      }}
+                      width={screenWidth - 32}
+                      height={220}
+                      chartConfig={{
+                        backgroundColor: '#fff',
+                        backgroundGradientFrom: '#fff',
+                        backgroundGradientTo: '#fff',
+                        color: () => '#2196F3',
+                        strokeWidth: 2,
+                      }}
+                      style={styles.chart}
+                    />
+                  </View>
+                )}
+
+                {loadingAdafruitData && (
+                  <View style={styles.centerContainer}>
+                    <ActivityIndicator size="small" color="#2196F3" />
+                    <Text style={styles.loadingText}>Loading sensor data...</Text>
+                  </View>
+                )}
+              </View>
+            )}
 
             {/* Activity Distribution Chart */}
             {sensorChartData && sensorChartData.datasets[0].data.length > 0 && (
@@ -774,6 +991,34 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   
+  // Sensor Selector
+  sensorSelector: {
+    marginBottom: 12,
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
+  },
+  sensorTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#E8E8E8',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#D0D0D0',
+  },
+  sensorTabActive: {
+    backgroundColor: '#2196F3',
+    borderColor: '#2196F3',
+  },
+  sensorTabText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+  },
+  sensorTabTextActive: {
+    color: '#fff',
+  },
+  
   // Sections
   section: {
     marginHorizontal: 16,
@@ -901,6 +1146,59 @@ const styles = StyleSheet.create({
   activityReason: {
     fontSize: 12,
     color: '#666',
+  },
+  
+  // Device Usage
+  usageList: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 2,
+  },
+  usageItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  usageLeft: {
+    flex: 1,
+  },
+  usageDeviceName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  usageDeviceType: {
+    fontSize: 12,
+    color: '#999',
+  },
+  usageRight: {
+    alignItems: 'flex-end',
+  },
+  usageTime: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#666',
+    marginBottom: 4,
+  },
+  usageTimeActive: {
+    color: '#4CAF50',
+  },
+  usageStatus: {
+    fontSize: 11,
+    color: '#999',
+  },
+  statusOn: {
+    color: '#4CAF50',
+    fontWeight: '600',
+  },
+  statusOff: {
+    color: '#999',
   },
   
   // Footer

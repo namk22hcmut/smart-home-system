@@ -173,7 +173,26 @@ def create_app(config_name='development'):
 app = create_app(os.getenv('FLASK_ENV', 'development'))
 
 # Initialize SocketIO for real-time notifications
-socketio = SocketIO(app, cors_allowed_origins=["http://localhost:8081", "http://127.0.0.1:8081", "http://localhost:8000", "http://10.0.106.239:8000", "http://10.0.106.239:8081"])
+# Added support for multiple transports (WebSocket + polling fallback)
+# Added CORS for local development IPs
+socketio = SocketIO(
+    app,
+    cors_allowed_origins=[
+        "http://localhost:8081",
+        "http://127.0.0.1:8081",
+        "http://localhost:8000",
+        "http://10.0.106.239:8000",
+        "http://10.0.106.239:8081",
+        "http://10.0.185.222:8000",  # Development IP for Expo app
+        "http://10.0.185.222:8081",
+        "http://0.0.0.0:8000",
+        "*"  # Allow all origins for development
+    ],
+    transports=['websocket', 'polling'],  # Fallback to polling if WebSocket fails
+    allow_upgrades=True,  # Allow upgrade from polling to WebSocket
+    ping_interval=60,  # Ping every 60 seconds
+    ping_timeout=120   # Wait 120 seconds for pong response
+)
 
 # Dictionary to store connected users: {user_id: [socket_ids]}
 connected_users = {}
@@ -255,113 +274,118 @@ def on_message(client, userdata, msg):
     payload = msg.payload.decode()
     logger.info(f"📨 MQTT: {topic} = {payload}")
     
-    # Parse Adafruit topic: {USERNAME}/feeds/{FEED_KEY}
-    try:
-        parts = topic.split('/feeds/')
-        if len(parts) == 2 and parts[0] == ADAFRUIT_USERNAME:
-            # Extract feed_key
-            feed_key = parts[1]
-            logger.info(f"🔍 Feed key: {feed_key}")
-            
-            # ✅ Look up mapping by feed_key (PRIMARY LOOKUP)
-            mapping = AdafruitFeedMapping.query.filter_by(
-                feed_key=feed_key,
-                is_active=True
-            ).first()
-            
-            if not mapping:
-                logger.warning(f"⚠️ No mapping found for feed: {feed_path}")
-                return
-            
-            logger.info(f"✅ Found mapping: {mapping.to_dict()}")
-            
-            # Process based on feed type
-            try:
-                value = float(payload)
-            except ValueError:
-                value = payload
-            
-            data_update = {}
-            
-            # Handle sensor data
-            if mapping.feed_type == 'sensor' and mapping.sensor_id:
-                sensor = Sensor.query.get(mapping.sensor_id)
-                if sensor:
-                    # Apply conversion factor
-                    converted_value = value * mapping.conversion_factor if isinstance(value, (int, float)) else value
-                    
-                    sensor_data = SensorData(
-                        sensor_id=mapping.sensor_id,
-                        value=converted_value
-                    )
-                    db.session.add(sensor_data)
-                    db.session.commit()
-                    
-                    data_update = {
-                        'type': 'sensor',
-                        'mapping_id': mapping.mapping_id,
-                        'sensor_id': mapping.sensor_id,
-                        'house_id': mapping.house_id,
-                        'room_id': mapping.room_id,
-                        'sensor_type': sensor.sensor_type,
-                        'value': converted_value,
-                        'unit': get_sensor_unit(sensor.sensor_type),
-                        'timestamp': datetime.utcnow().isoformat()
-                    }
-                    logger.info(f"💾 Saved sensor data: {converted_value} for sensor {mapping.sensor_id}")
-            
-            # Handle device control
-            elif mapping.feed_type == 'device' and mapping.device_id:
-                device = Device.query.get(mapping.device_id)
-                if device:
-                    # Apply conversion based on data_key
-                    if mapping.data_key == 'status':
-                        # Status: "on"/"off" or 0/1
-                        new_status = 'on' if (value or payload.lower() in ['on', 'true', '1']) else 'off'
-                        device.status = new_status
-                        
-                        data_update = {
-                            'type': 'device',
-                            'mapping_id': mapping.mapping_id,
-                            'device_id': mapping.device_id,
-                            'house_id': mapping.house_id,
-                            'room_id': mapping.room_id,
-                            'device_type': device.device_type,
-                            'status': new_status,
-                            'level': device.level,
-                            'timestamp': datetime.utcnow().isoformat()
-                        }
-                        logger.info(f"💡 Device {mapping.device_id} status → {new_status}")
-                    
-                    elif mapping.data_key == 'level':
-                        # Level: 0-100 (percentage)
-                        converted_value = value * mapping.conversion_factor if isinstance(value, (int, float)) else 0
-                        new_level = max(0, min(100, int(converted_value)))
-                        device.level = new_level
-                        device.status = 'on' if new_level > 0 else 'off'
-                        
-                        data_update = {
-                            'type': 'device',
-                            'mapping_id': mapping.mapping_id,
-                            'device_id': mapping.device_id,
-                            'house_id': mapping.house_id,
-                            'room_id': mapping.room_id,
-                            'device_type': device.device_type,
-                            'status': device.status,
-                            'level': new_level,
-                            'timestamp': datetime.utcnow().isoformat()
-                        }
-                        logger.info(f"🔆 Device {mapping.device_id} level → {new_level}%")
-                    
-                    db.session.commit()
-            
-            # 🔥 Broadcast to all connected clients via Socket.IO
-            if data_update:
-                socketio.emit('realtime_update', data_update, broadcast=True)
-                logger.info(f"📡 Broadcast: {data_update}")
+    # 🔥 IMPORTANT: Wrap with app context for database access
+    with app.app_context():
+        # Parse Adafruit topic: {USERNAME}/feeds/{FEED_KEY}
+        try:
+            parts = topic.split('/feeds/')
+            if len(parts) == 2 and parts[0] == ADAFRUIT_USERNAME:
+                # Extract feed_key
+                feed_key = parts[1]
+                logger.info(f"🔍 Feed key: {feed_key}")
                 
-    except Exception as e:
-        logger.error(f"Error processing MQTT message: {e}", exc_info=True)
+                # ✅ Look up mapping by feed_key (PRIMARY LOOKUP)
+                mapping = AdafruitFeedMapping.query.filter_by(
+                    feed_key=feed_key,
+                    is_active=True
+                ).first()
+                
+                if not mapping:
+                    logger.warning(f"⚠️ No mapping found for feed: {feed_key}")
+                    return
+                
+                logger.info(f"✅ Found mapping: {mapping.to_dict()}")
+                
+                # Process based on feed type
+                try:
+                    value = float(payload)
+                except ValueError:
+                    value = payload
+                
+                data_update = {}
+                
+                # Handle sensor data
+                if mapping.feed_type == 'sensor' and mapping.sensor_id:
+                    sensor = Sensor.query.get(mapping.sensor_id)
+                    if sensor:
+                        # Apply conversion factor
+                        converted_value = value * mapping.conversion_factor if isinstance(value, (int, float)) else value
+                        
+                        sensor_data = SensorData(
+                            sensor_id=mapping.sensor_id,
+                            value=converted_value
+                        )
+                        db.session.add(sensor_data)
+                        db.session.commit()
+                        
+                        data_update = {
+                            'type': 'sensor',
+                            'mapping_id': mapping.mapping_id,
+                            'sensor_id': mapping.sensor_id,
+                            'house_id': mapping.house_id,
+                            'room_id': mapping.room_id,
+                            'sensor_type': sensor.sensor_type,
+                            'value': converted_value,
+                            'unit': get_sensor_unit(sensor.sensor_type),
+                            'timestamp': datetime.utcnow().isoformat()
+                        }
+                        logger.info(f"💾 Saved sensor data: {converted_value} for sensor {mapping.sensor_id}")
+                
+                # Handle device control
+                elif mapping.feed_type == 'device' and mapping.device_id:
+                    device = Device.query.get(mapping.device_id)
+                    if device:
+                        # Apply conversion based on data_key
+                        if mapping.data_key == 'status':
+                            # Status: "on"/"off" or 0/1
+                            new_status = 'on' if (value or payload.lower() in ['on', 'true', '1']) else 'off'
+                            device.status = new_status
+                            
+                            data_update = {
+                                'type': 'device',
+                                'mapping_id': mapping.mapping_id,
+                                'device_id': mapping.device_id,
+                                'house_id': mapping.house_id,
+                                'room_id': mapping.room_id,
+                                'device_type': device.device_type,
+                                'status': new_status,
+                                'level': device.level,
+                                'timestamp': datetime.utcnow().isoformat()
+                            }
+                            logger.info(f"💡 Device {mapping.device_id} status → {new_status}")
+                        
+                        elif mapping.data_key == 'level':
+                            # Level: 0-100 (percentage)
+                            converted_value = value * mapping.conversion_factor if isinstance(value, (int, float)) else 0
+                            new_level = max(0, min(100, int(converted_value)))
+                            device.level = new_level
+                            device.status = 'on' if new_level > 0 else 'off'
+                            
+                            data_update = {
+                                'type': 'device',
+                                'mapping_id': mapping.mapping_id,
+                                'device_id': mapping.device_id,
+                                'house_id': mapping.house_id,
+                                'room_id': mapping.room_id,
+                                'device_type': device.device_type,
+                                'status': device.status,
+                                'level': new_level,
+                                'timestamp': datetime.utcnow().isoformat()
+                            }
+                            logger.info(f"🔆 Device {mapping.device_id} level → {new_level}%")
+                        
+                        db.session.commit()
+                
+                # 🔥 Broadcast to all connected clients via Socket.IO
+                if data_update:
+                    try:
+                        socketio.emit('realtime_update', data_update, to=None)
+                        logger.info(f"📡 Broadcast: {data_update}")
+                    except Exception as broadcast_error:
+                        logger.warning(f"⚠️ Broadcast error (data still saved): {broadcast_error}")
+                    
+        except Exception as e:
+            logger.error(f"Error processing MQTT message: {e}", exc_info=True)
 
 mqtt_client.on_connect = on_connect
 mqtt_client.on_message = on_message
@@ -438,93 +462,103 @@ def publish_device_command(device_id, command_type, value):
 # =====================================================
 
 def sync_devices_to_adafruit():
-    """Auto-create Adafruit feeds for all devices/sensors in database"""
-    logger.info("🔄 Starting sync_devices_to_adafruit()...")
+    """Create mappings for ALL sensors/devices to 3 fixed Adafruit feeds"""
+    logger.info("🔄 Starting sync_devices_to_adafruit() - Mapping ALL sensors to 3 feeds...")
     
     try:
         with app.app_context():
-            # 🔹 Sync Sensors
-            sensors = Sensor.query.all()
-            for sensor in sensors:
-                try:
-                    room = Room.query.get(sensor.room_id)
-                    if not room:
-                        continue
-                    
-                    # Generate feed_key
-                    feed_key = f"{sensor.sensor_type}-sensor-{sensor.sensor_id}".lower()
-                    feed_name = f"{room.room_name} {sensor.sensor_name}"
-                    
-                    # Check if mapping exists
-                    mapping = AdafruitFeedMapping.query.filter_by(feed_key=feed_key).first()
-                    if mapping:
-                        logger.info(f"✅ Sensor mapping exists: {feed_key}")
-                        continue
-                    
-                    # Create feed in Adafruit
-                    create_adafruit_feed(feed_key, feed_name)
-                    
-                    # Create mapping
-                    mapping = AdafruitFeedMapping(
-                        feed_key=feed_key,
-                        feed_name=f"home/sensor/{sensor.sensor_id}",
-                        sensor_id=sensor.sensor_id,
-                        house_id=room.floor.house_id,
-                        room_id=room.room_id,
-                        feed_type='sensor',
-                        conversion_factor=1.0,
-                        is_active=True
-                    )
-                    db.session.add(mapping)
-                    logger.info(f"📡 Created sensor mapping: {feed_key}")
-                except Exception as e:
-                    logger.error(f"Error syncing sensor {sensor.sensor_id}: {e}")
-                    continue
+            # Clear old mappings
+            AdafruitFeedMapping.query.delete()
+            db.session.commit()
+            logger.info("🗑️ Cleared old feed mappings")
             
-            # 🔹 Sync Devices
-            devices = Device.query.all()
-            for device in devices:
+            # Define the 3 fixed feeds
+            FIXED_FEEDS = [
+                {
+                    'feed_key': 'temperature',
+                    'feed_name': 'Temperature Sensor',
+                    'feed_type': 'sensor',
+                    'sensor_type': 'temperature',
+                },
+                {
+                    'feed_key': 'humidity',
+                    'feed_name': 'Humidity Sensor',
+                    'feed_type': 'sensor',
+                    'sensor_type': 'humidity',
+                },
+                {
+                    'feed_key': 'fan',
+                    'feed_name': 'Fan Device',
+                    'feed_type': 'device',
+                    'device_type': 'fan',
+                },
+            ]
+            
+            for feed_config in FIXED_FEEDS:
                 try:
-                    room = Room.query.get(device.room_id)
-                    if not room:
-                        continue
+                    if feed_config['feed_type'] == 'sensor':
+                        # Get ALL sensors of this type
+                        sensors = Sensor.query.filter_by(
+                            sensor_type=feed_config['sensor_type']
+                        ).all()
+                        
+                        for sensor in sensors:
+                            # Get house_id and room_id from sensor's room
+                            house_id = None
+                            room_id = sensor.room_id
+                            if sensor.room and sensor.room.floor and sensor.room.floor.house:
+                                house_id = sensor.room.floor.house_id
+                            
+                            # Create mapping for EACH sensor
+                            mapping = AdafruitFeedMapping(
+                                feed_key=feed_config['feed_key'],
+                                feed_name=feed_config['feed_name'],
+                                sensor_id=sensor.sensor_id,
+                                house_id=house_id,
+                                room_id=room_id,
+                                feed_type='sensor',
+                                conversion_factor=1.0,
+                                is_active=True
+                            )
+                            db.session.add(mapping)
+                            logger.info(f"📡 Mapped: feed_key={feed_config['feed_key']} → sensor_id={sensor.sensor_id} (type: {sensor.sensor_type})")
                     
-                    # Generate feed_key
-                    feed_key = f"{device.device_type}-device-{device.device_id}".lower()
-                    feed_name = f"{room.room_name} {device.device_name}"
+                    elif feed_config['feed_type'] == 'device':
+                        # Get ALL devices of this type
+                        devices = Device.query.filter_by(
+                            device_type=feed_config['device_type']
+                        ).all()
+                        
+                        for device in devices:
+                            # Get house_id and room_id from device's room
+                            house_id = None
+                            room_id = device.room_id
+                            if device.room and device.room.floor and device.room.floor.house:
+                                house_id = device.room.floor.house_id
+                            
+                            # Create mapping for EACH device
+                            mapping = AdafruitFeedMapping(
+                                feed_key=feed_config['feed_key'],
+                                feed_name=feed_config['feed_name'],
+                                device_id=device.device_id,
+                                house_id=house_id,
+                                room_id=room_id,
+                                feed_type='device',
+                                data_key='level',
+                                conversion_factor=1.0,
+                                is_active=True
+                            )
+                            db.session.add(mapping)
+                            logger.info(f"📡 Mapped: feed_key={feed_config['feed_key']} → device_id={device.device_id} (type: {device.device_type})")
                     
-                    # Check if mapping exists
-                    mapping = AdafruitFeedMapping.query.filter_by(
-                        feed_key=feed_key,
-                        device_id=device.device_id
-                    ).first()
-                    if mapping:
-                        logger.info(f"✅ Device mapping exists: {feed_key}")
-                        continue
-                    
-                    # Create feed in Adafruit
-                    create_adafruit_feed(feed_key, feed_name)
-                    
-                    # Create mapping for level control
-                    mapping = AdafruitFeedMapping(
-                        feed_key=feed_key,
-                        feed_name=f"home/device/{device.device_id}",
-                        device_id=device.device_id,
-                        house_id=room.floor.house_id,
-                        room_id=room.room_id,
-                        feed_type='device',
-                        data_key='level',
-                        conversion_factor=1.0,
-                        is_active=True
-                    )
-                    db.session.add(mapping)
-                    logger.info(f"📡 Created device mapping: {feed_key}")
                 except Exception as e:
-                    logger.error(f"Error syncing device {device.device_id}: {e}")
+                    logger.error(f"Error creating feeds for {feed_config['feed_key']}: {e}")
+                    db.session.rollback()
                     continue
             
             db.session.commit()
-            logger.info("✅ Sync complete!")
+            total_mappings = AdafruitFeedMapping.query.count()
+            logger.info(f"✅ Sync complete! Created {total_mappings} total feed mappings")
             return True
             
     except Exception as e:
@@ -538,40 +572,23 @@ def simulate_sensor_data():
     
     try:
         with app.app_context():
-            # Get all sensor mappings
-            mappings = AdafruitFeedMapping.query.filter_by(
-                feed_type='sensor',
-                is_active=True
-            ).all()
+            # Simulate 3 fixed feeds
+            FEEDS_TO_SIMULATE = {
+                'temperature': (18, 35, '°C'),      # 18-35°C
+                'humidity': (30, 90, '%'),          # 30-90%
+                'fan': (0, 100, '%'),               # 0-100%
+            }
             
-            for mapping in mappings:
+            for feed_key, (min_val, max_val, unit) in FEEDS_TO_SIMULATE.items():
                 try:
-                    sensor = Sensor.query.get(mapping.sensor_id)
-                    if not sensor:
-                        continue
-                    
-                    # Generate realistic values based on sensor type
-                    if sensor.sensor_type == 'temperature':
-                        value = random.uniform(18, 35)  # 18-35°C
-                    elif sensor.sensor_type == 'humidity':
-                        value = random.uniform(30, 90)  # 30-90%
-                    elif sensor.sensor_type == 'light':
-                        value = random.uniform(50, 1000)  # 50-1000 lux
-                    elif sensor.sensor_type == 'motion':
-                        value = random.choice([0, 1])  # 0 or 1
-                    elif sensor.sensor_type == 'co2':
-                        value = random.uniform(300, 1000)  # 300-1000 ppm
-                    elif sensor.sensor_type == 'pressure':
-                        value = random.uniform(980, 1020)  # 980-1020 hPa
-                    else:
-                        value = random.uniform(0, 100)
+                    value = random.uniform(min_val, max_val)
                     
                     # Publish to Adafruit
-                    topic = f"{ADAFRUIT_USERNAME}/feeds/{mapping.feed_key}"
+                    topic = f"{ADAFRUIT_USERNAME}/feeds/{feed_key}"
                     mqtt_client.publish(topic, str(round(value, 2)), qos=1)
-                    logger.info(f"📤 Simulated: {mapping.feed_key} = {value:.2f}")
+                    logger.info(f"📤 Simulated: {feed_key} = {value:.2f}{unit}")
                 except Exception as e:
-                    logger.error(f"Error simulating sensor {mapping.sensor_id}: {e}")
+                    logger.error(f"Error simulating feed {feed_key}: {e}")
                     continue
                     
     except Exception as e:
@@ -606,7 +623,180 @@ def automation_checker():
         # Wait 30 seconds before checking again
         time.sleep(30)
 
-# Note: Automation checker thread will be started in main block after app initialization
+def schedule_executor():
+    """Execute device schedules every minute"""
+    import time
+    from datetime import datetime, timedelta
+    
+    while True:
+        try:
+            with app.app_context():
+                now = datetime.now()
+                current_time = now.time()
+                current_day = now.weekday()  # 0=Monday, 6=Sunday
+                
+                # Get all active schedules
+                schedules = Schedule.query.filter_by(is_active=True).all()
+                
+                for schedule in schedules:
+                    # Check if today is in days_of_week
+                    if schedule.days_of_week:
+                        days = [int(d) for d in schedule.days_of_week.split(',')]
+                        # Convert Python weekday (0=Mon) to ISO (0=Mon, but we use 0-6 for Sun-Sat)
+                        # Adjust: 0=Sunday in our system, Python: 0=Monday
+                        iso_day = (current_day + 1) % 7  # Convert to 0=Sunday
+                        if iso_day not in days:
+                            continue
+                    
+                    # **PART 1: Check for scheduled turn-on/off**
+                    # Check if current time matches scheduled time (with 1-minute window)
+                    time_diff = abs((datetime.combine(now.date(), schedule.scheduled_time) - 
+                                   datetime.combine(now.date(), current_time)).total_seconds())
+                    
+                    if time_diff < 60:  # Within 1-minute window
+                        # Check if already triggered today
+                        if schedule.last_triggered_at:
+                            last_trigger_date = schedule.last_triggered_at.date()
+                            if last_trigger_date == now.date():
+                                continue  # Already triggered today
+                        
+                        # Execute schedule
+                        device = Device.query.get(schedule.device_id)
+                        if device:
+                            # Set device status
+                            device.status = schedule.action_status
+                            device.level = schedule.action_level if schedule.action_status == 'on' else 0
+                            schedule.last_triggered_at = now
+                            
+                            # If duration > 0, calculate auto-off time
+                            if schedule.duration_minutes > 0 and schedule.action_status == 'on':
+                                auto_off_at = now + timedelta(minutes=schedule.duration_minutes)
+                                schedule.auto_off_at = auto_off_at
+                                logger.info(f"⏱️ Device {device.device_name} will auto-off at {auto_off_at.strftime('%H:%M:%S')}")
+                            else:
+                                schedule.auto_off_at = None
+                            
+                            db.session.commit()
+                            
+                            # Log activity
+                            log = DeviceActivityLog(
+                                device_id=schedule.device_id,
+                                action='schedule_executed',
+                                triggered_by='schedule',
+                                reason=f'Schedule executed: {schedule.scheduled_time}',
+                                schedule_id=schedule.schedule_id
+                            )
+                            db.session.add(log)
+                            db.session.commit()
+                            
+                            # Create notification for device owner
+                            device_room = Room.query.get(device.room_id)
+                            if device_room:
+                                floor = Floor.query.get(device_room.floor_id)
+                                if floor:
+                                    house = House.query.get(floor.house_id)
+                                    if house:
+                                        # Create notification for house owner
+                                        notification = Notification(
+                                            user_id=house.user_id,
+                                            title='🔄 Schedule Executed',
+                                            message=f'{device.device_name} turned {schedule.action_status.upper()} at {schedule.scheduled_time}',
+                                            notification_type='schedule',
+                                            is_read=False,
+                                            data={
+                                                'device_id': device.device_id,
+                                                'schedule_id': schedule.schedule_id,
+                                                'action': schedule.action_status,
+                                                'level': schedule.action_level
+                                            }
+                                        )
+                                        db.session.add(notification)
+                                        db.session.commit()
+                                        
+                                        # Broadcast via WebSocket to connected user
+                                        if house.user_id in connected_users:
+                                            socketio.emit(
+                                                'schedule_executed',
+                                                {
+                                                    'device_id': device.device_id,
+                                                    'device_name': device.device_name,
+                                                    'action': schedule.action_status,
+                                                    'level': schedule.action_level,
+                                                    'timestamp': now.isoformat(),
+                                                    'duration': schedule.duration_minutes
+                                                },
+                                                room=[s for s in connected_users.get(house.user_id, [])],
+                                                skip_sid=None
+                                            )
+                            
+                            logger.info(f"✅ Schedule executed: Device {device.device_name} → {schedule.action_status}")
+                    
+                    # **PART 2: Check for auto-off (duration expiry)**
+                    if schedule.auto_off_at and now >= schedule.auto_off_at:
+                        # Time to auto-off
+                        device = Device.query.get(schedule.device_id)
+                        if device and device.status == 'on':
+                            # Turn off device
+                            device.status = 'off'
+                            device.level = 0
+                            schedule.auto_off_at = None  # Clear auto-off time
+                            db.session.commit()
+                            
+                            # Log activity
+                            log = DeviceActivityLog(
+                                device_id=schedule.device_id,
+                                action='schedule_auto_off',
+                                triggered_by='schedule',
+                                reason=f'Auto-off after {schedule.duration_minutes} minute(s)',
+                                schedule_id=schedule.schedule_id
+                            )
+                            db.session.add(log)
+                            db.session.commit()
+                            
+                            # Create notification
+                            device_room = Room.query.get(device.room_id)
+                            if device_room:
+                                floor = Floor.query.get(device_room.floor_id)
+                                if floor:
+                                    house = House.query.get(floor.house_id)
+                                    if house:
+                                        notification = Notification(
+                                            user_id=house.user_id,
+                                            title='⏱️ Auto-Off Triggered',
+                                            message=f'{device.device_name} auto-turned off after {schedule.duration_minutes} minute(s)',
+                                            notification_type='auto_off',
+                                            is_read=False,
+                                            data={
+                                                'device_id': device.device_id,
+                                                'schedule_id': schedule.schedule_id
+                                            }
+                                        )
+                                        db.session.add(notification)
+                                        db.session.commit()
+                                        
+                                        # Broadcast via WebSocket
+                                        if house.user_id in connected_users:
+                                            socketio.emit(
+                                                'schedule_auto_off',
+                                                {
+                                                    'device_id': device.device_id,
+                                                    'device_name': device.device_name,
+                                                    'timestamp': now.isoformat(),
+                                                    'reason': f'After {schedule.duration_minutes} minute(s)'
+                                                },
+                                                room=[s for s in connected_users.get(house.user_id, [])],
+                                                skip_sid=None
+                                            )
+                            
+                            logger.info(f"🔴 Auto-off executed: Device {device.device_name}")
+                
+        except Exception as e:
+            logger.error(f"Error in schedule executor: {e}")
+        
+        # Check every minute
+        time.sleep(60)
+
+# Note: Automation checker & Schedule executor threads will be started in main block after app initialization
 
 # =====================================================
 # SOCKETIO HANDLERS FOR REAL-TIME NOTIFICATIONS
@@ -1214,34 +1404,34 @@ def create_device():
         db.session.add(device)
         db.session.flush()  # Get device_id
         
-        # ✅ Phase 2: Auto-create Adafruit feed
+        # ✅ Phase 2: Map to fixed Adafruit feeds (DO NOT create new feeds)
         try:
             room = Room.query.get(device.room_id)
             if room:
-                # Generate feed_key
-                feed_key = f"{device.device_type}-device-{device.device_id}".lower()
-                feed_name = f"{room.room_name} {device.device_name}"
+                # Determine which fixed feed to map to
+                if device.device_type == 'fan':
+                    feed_key = 'fan'  # Only fans map to Adafruit
+                else:
+                    feed_key = None  # Other device types don't map
                 
-                # Create feed in Adafruit
-                create_adafruit_feed(feed_key, feed_name)
-                
-                # Create mapping
-                mapping = AdafruitFeedMapping(
-                    feed_key=feed_key,
-                    feed_name=f"home/device/{device.device_id}",
-                    device_id=device.device_id,
-                    house_id=room.floor.house_id,
-                    room_id=room.room_id,
-                    feed_type='device',
-                    data_key='level',
-                    conversion_factor=1.0,
-                    is_active=True
-                )
-                db.session.add(mapping)
-                logger.info(f"✅ Auto-created Adafruit feed mapping: {feed_key}")
+                if feed_key:
+                    # Map to existing fixed feed (no new feed creation)
+                    mapping = AdafruitFeedMapping(
+                        feed_key=feed_key,
+                        feed_name=f"{room.room_name} {device.device_name}",
+                        device_id=device.device_id,
+                        house_id=room.floor.house_id,
+                        room_id=room.room_id,
+                        feed_type='device',
+                        data_key='level',
+                        conversion_factor=1.0,
+                        is_active=True
+                    )
+                    db.session.add(mapping)
+                    logger.info(f"✅ Mapped new device: {device.device_id} → feed_key={feed_key}")
         except Exception as e:
-            logger.error(f"⚠️ Failed to auto-create Adafruit feed: {e}")
-            # Continue anyway, user can create mapping manually
+            logger.error(f"⚠️ Failed to create mapping: {e}")
+            # Continue anyway
         
         db.session.commit()
         return jsonify({'success': True, 'id': device.device_id}), 201
@@ -1410,6 +1600,24 @@ def update_device(device_id):
         
         db.session.commit()
         
+        # 📝 Log device activity for dashboard usage tracking
+        # Create log regardless of what changed (status, level, or both)
+        log = DeviceActivityLog(
+            device_id=device_id,
+            user_id=request.user_id,
+            action='set_level' if (data.get('level') is not None and data.get('level') != old_level) else ('turn_on' if device.status == 'on' else 'turn_off'),
+            old_status=old_status,
+            new_status=device.status,
+            old_level=old_level,
+            new_level=device.level,
+            triggered_by='user',
+            reason=f'User updated device: {old_status}→{device.status} (level {old_level}→{device.level})'
+        )
+        db.session.add(log)
+        db.session.commit()
+        
+        logger.info(f"✅ Activity logged: Device {device_id} {old_status}→{device.status}")
+        
         return jsonify({
             'success': True,
             'id': device.device_id,
@@ -1477,31 +1685,32 @@ def create_sensor():
         db.session.add(sensor)
         db.session.flush()  # Get sensor_id
         
-        # ✅ Phase 2: Auto-create Adafruit feed
+        # ✅ Phase 2: Map to fixed Adafruit feeds (DO NOT create new feeds)
         try:
-            # Generate feed_key
-            feed_key = f"{sensor.sensor_type}-sensor-{sensor.sensor_id}".lower()
-            feed_name = f"{room.room_name} {sensor.sensor_name}"
+            # Determine which fixed feed to map to
+            if sensor.sensor_type in ['temperature', 'humidity']:
+                feed_key = sensor.sensor_type  # "temperature" or "humidity"
+            else:
+                # Other sensor types don't map to Adafruit
+                feed_key = None
             
-            # Create feed in Adafruit
-            create_adafruit_feed(feed_key, feed_name)
-            
-            # Create mapping
-            mapping = AdafruitFeedMapping(
-                feed_key=feed_key,
-                feed_name=f"home/sensor/{sensor.sensor_id}",
-                sensor_id=sensor.sensor_id,
-                house_id=house.house_id,
-                room_id=room.room_id,
-                feed_type='sensor',
-                conversion_factor=1.0,
-                is_active=True
-            )
-            db.session.add(mapping)
-            logger.info(f"✅ Auto-created Adafruit feed mapping: {feed_key}")
+            if feed_key:
+                # Map to existing fixed feed (no new feed creation)
+                mapping = AdafruitFeedMapping(
+                    feed_key=feed_key,
+                    feed_name=f"{room.room_name} {sensor.sensor_name}",
+                    sensor_id=sensor.sensor_id,
+                    house_id=house.house_id,
+                    room_id=room.room_id,
+                    feed_type='sensor',
+                    conversion_factor=1.0,
+                    is_active=True
+                )
+                db.session.add(mapping)
+                logger.info(f"✅ Mapped new sensor: {sensor.sensor_id} → feed_key={feed_key}")
         except Exception as e:
-            logger.error(f"⚠️ Failed to auto-create Adafruit feed: {e}")
-            # Continue anyway, user can create mapping manually
+            logger.error(f"⚠️ Failed to create mapping: {e}")
+            # Continue anyway
         
         db.session.commit()
         return jsonify({'success': True, 'id': sensor.sensor_id}), 201
@@ -2103,6 +2312,93 @@ def get_activity_summary(house_id):
         logger.error(f"Error fetching activity summary: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/houses/<int:house_id>/device-usage', methods=['GET'])
+@require_auth
+def get_device_usage(house_id):
+    """
+    Get device usage time for all devices in a house
+    Query params:
+      - period: 'today' (default), 'week', 'month'
+    Returns: List of devices with their usage time in minutes
+    """
+    try:
+        house = House.query.get(house_id)
+        if not house or house.user_id != request.user_id:
+            return jsonify({'success': False, 'error': 'House not found or access denied'}), 404
+        
+        period = request.args.get('period', 'today')
+        now = datetime.now()
+        
+        # Calculate start date based on period
+        if period == 'today':
+            start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif period == 'week':
+            start_date = now - timedelta(days=7)
+        elif period == 'month':
+            start_date = now - timedelta(days=30)
+        else:
+            start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Get all devices in the house
+        devices = Device.query.join(Room).join(Floor).filter(Floor.house_id == house_id).all()
+
+        device_usage = []
+        for device in devices:
+            # Include both ON and OFF activities (and level changes) within the period
+            actions_to_fetch = ['turn_on', 'turn_off', 'schedule_executed', 'schedule_auto_off', 'set_level', 'toggle']
+            activities = DeviceActivityLog.query.filter(
+                DeviceActivityLog.device_id == device.device_id,
+                DeviceActivityLog.timestamp >= start_date,
+                DeviceActivityLog.action.in_(actions_to_fetch)
+            ).order_by(DeviceActivityLog.timestamp).all()
+
+            # Calculate usage time by pairing on -> off intervals
+            total_minutes = 0.0
+            turn_on_time = None
+
+            for act in activities:
+                # Normalize 'on' event detection
+                is_on_event = (str(act.new_status).lower() == 'on') or (act.action == 'set_level' and act.new_level is not None and act.new_level > 0)
+                is_off_event = (str(act.new_status).lower() == 'off') or (act.action == 'set_level' and act.new_level == 0) or (act.action in ['turn_off', 'schedule_auto_off'])
+
+                if is_on_event:
+                    if turn_on_time is None:
+                        turn_on_time = act.timestamp
+                elif is_off_event:
+                    if turn_on_time:
+                        duration = (act.timestamp - turn_on_time).total_seconds() / 60.0
+                        total_minutes += max(0.0, duration)
+                        turn_on_time = None
+
+            # If the device is currently ON, account for running time up to now
+            if device.status == 'on':
+                if turn_on_time is None:
+                    # No on event inside the window -> device was already on at start_date
+                    total_minutes += max(0.0, (now - start_date).total_seconds() / 60.0)
+                else:
+                    total_minutes += max(0.0, (now - turn_on_time).total_seconds() / 60.0)
+
+            # Round and format
+            total_minutes = round(total_minutes, 2)
+            device_usage.append({
+                'device_id': device.device_id,
+                'device_name': device.device_name,
+                'device_type': device.device_type,
+                'status': device.status,
+                'usage_minutes': total_minutes,
+                'usage_hours': round(total_minutes / 60.0, 2),
+                'usage_display': f"{int(total_minutes // 60)}h {int(total_minutes % 60)}m"
+            })
+        
+        return jsonify({
+            'success': True,
+            'period': period,
+            'start_date': start_date.isoformat(),
+            'devices': device_usage
+        }), 200
+    except Exception as e:
+        logger.error(f"Error fetching device usage: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # =====================================================
 # FEATURE 2: DEVICE SCHEDULING
@@ -2120,15 +2416,20 @@ def get_device_schedules(device_id):
         schedules = Schedule.query.filter_by(device_id=device_id).all()
         return jsonify({
             'success': True,
+            'device_id': device_id,
+            'device_name': device.device_name,
             'schedules': [{
                 'schedule_id': s.schedule_id,
                 'device_id': s.device_id,
-                'scheduled_time': s.scheduled_time.isoformat(),
+                'scheduled_time': s.scheduled_time.strftime('%H:%M') if s.scheduled_time else None,
                 'action_status': s.action_status,
                 'action_level': s.action_level,
+                'duration_minutes': s.duration_minutes,
                 'days_of_week': s.days_of_week,
                 'is_active': s.is_active,
-                'created_at': s.created_at.isoformat()
+                'last_triggered_at': s.last_triggered_at.isoformat() if s.last_triggered_at else None,
+                'auto_off_at': s.auto_off_at.isoformat() if s.auto_off_at else None,
+                'created_at': s.created_at.isoformat() if s.created_at else None
             } for s in schedules]
         }), 200
     except Exception as e:
@@ -2136,12 +2437,19 @@ def get_device_schedules(device_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+
 @app.route('/api/devices/<int:device_id>/schedules', methods=['POST'])
 @require_auth
 def create_device_schedule(device_id):
     """
     Create a new schedule for a device
-    Body: {scheduled_time: "HH:MM", action_status: "on"|"off", action_level: 0-100, days_of_week: "0,1,2,3,4,5,6"}
+    Body: {
+        scheduled_time: "HH:MM",
+        action_status: "on"|"off",
+        action_level: 0-100,
+        duration_minutes: 30 (optional, 0 = forever),
+        days_of_week: "0,1,2,3,4,5,6"
+    }
     """
     try:
         device = Device.query.get(device_id)
@@ -2152,10 +2460,15 @@ def create_device_schedule(device_id):
         scheduled_time = data.get('scheduled_time')  # "14:30"
         action_status = data.get('action_status')
         action_level = data.get('action_level', 0)
+        duration_minutes = data.get('duration_minutes', 0)  # 0 = forever
         days_of_week = data.get('days_of_week', '0,1,2,3,4,5,6')  # All days by default
         
         if not scheduled_time or action_status not in ['on', 'off']:
             return jsonify({'success': False, 'error': 'Invalid schedule parameters'}), 400
+        
+        # Validate duration
+        if not isinstance(duration_minutes, int) or duration_minutes < 0:
+            return jsonify({'success': False, 'error': 'duration_minutes must be >= 0'}), 400
         
         # Parse time
         try:
@@ -2170,6 +2483,7 @@ def create_device_schedule(device_id):
             scheduled_time=schedule_time,
             action_status=action_status,
             action_level=action_level,
+            duration_minutes=duration_minutes,
             days_of_week=days_of_week,
             is_active=True
         )
@@ -2183,7 +2497,7 @@ def create_device_schedule(device_id):
             user_id=request.user_id,
             action='create_schedule',
             triggered_by='user',
-            reason=f'Created schedule for {scheduled_time}',
+            reason=f'Created schedule for {scheduled_time} (duration: {duration_minutes}m)',
             schedule_id=schedule.schedule_id
         )
         db.session.add(log)
@@ -2192,13 +2506,46 @@ def create_device_schedule(device_id):
         return jsonify({
             'success': True,
             'schedule_id': schedule.schedule_id,
-            'message': 'Schedule created successfully'
+            'message': f'Schedule created: {scheduled_time} for {duration_minutes or "∞"} minutes'
         }), 201
     except Exception as e:
         logger.error(f"Error creating device schedule: {e}")
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/schedules/<int:schedule_id>', methods=['DELETE'])
+@require_auth
+def delete_schedule(schedule_id):
+    """Delete a schedule"""
+    try:
+        schedule = Schedule.query.get(schedule_id)
+        if not schedule:
+            return jsonify({'success': False, 'error': 'Schedule not found'}), 404
+        
+        device_id = schedule.device_id
+        db.session.delete(schedule)
+        db.session.commit()
+        
+        # Log activity
+        log = DeviceActivityLog(
+            device_id=device_id,
+            user_id=request.user_id,
+            action='delete_schedule',
+            triggered_by='user',
+            reason=f'Deleted schedule',
+            schedule_id=schedule_id
+        )
+        db.session.add(log)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Schedule deleted successfully'
+        }), 200
+    except Exception as e:
+        logger.error(f"Error deleting schedule: {e}")
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/schedules/<int:schedule_id>', methods=['PUT'])
 @require_auth
@@ -2223,6 +2570,10 @@ def update_schedule(schedule_id):
             schedule.action_status = data['action_status']
         if 'action_level' in data:
             schedule.action_level = data['action_level']
+        if 'duration_minutes' in data:
+            if not isinstance(data['duration_minutes'], int) or data['duration_minutes'] < 0:
+                return jsonify({'success': False, 'error': 'duration_minutes must be >= 0'}), 400
+            schedule.duration_minutes = data['duration_minutes']
         if 'days_of_week' in data:
             schedule.days_of_week = data['days_of_week']
         if 'is_active' in data:
@@ -2236,7 +2587,7 @@ def update_schedule(schedule_id):
             user_id=request.user_id,
             action='update_schedule',
             triggered_by='user',
-            reason=f'Updated schedule',
+            reason=f'Updated schedule (duration: {schedule.duration_minutes}m)',
             schedule_id=schedule_id
         )
         db.session.add(log)
@@ -2245,39 +2596,6 @@ def update_schedule(schedule_id):
         return jsonify({'success': True, 'message': 'Schedule updated'}), 200
     except Exception as e:
         logger.error(f"Error updating schedule: {e}")
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/schedules/<int:schedule_id>', methods=['DELETE'])
-@require_auth
-def delete_schedule(schedule_id):
-    """Delete a schedule"""
-    try:
-        schedule = Schedule.query.get(schedule_id)
-        if not schedule:
-            return jsonify({'success': False, 'error': 'Schedule not found'}), 404
-        
-        device_id = schedule.device_id
-        
-        db.session.delete(schedule)
-        db.session.commit()
-        
-        # Log activity
-        log = DeviceActivityLog(
-            device_id=device_id,
-            user_id=request.user_id,
-            action='delete_schedule',
-            triggered_by='user',
-            reason='Deleted schedule',
-            schedule_id=schedule_id
-        )
-        db.session.add(log)
-        db.session.commit()
-        
-        return jsonify({'success': True, 'message': 'Schedule deleted'}), 200
-    except Exception as e:
-        logger.error(f"Error deleting schedule: {e}")
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -2846,6 +3164,123 @@ def get_adafruit_data(feed_key):
             'error': str(e)
         }), 500
 
+@app.route('/api/adafruit/fetch-live', methods=['POST'])
+@require_auth
+def fetch_live_adafruit_data():
+    """
+    🔥 Fetch LIVE data from Adafruit AND save to database
+    Called when user clicks 'Update from Adafruit' button
+    Expected request body: {"sensor_id": 8}
+    """
+    try:
+        data = request.get_json()
+        sensor_id = data.get('sensor_id')
+        
+        if not sensor_id:
+            return jsonify({'success': False, 'error': 'sensor_id is required'}), 400
+        
+        # Get mapping by sensor_id
+        mapping = AdafruitFeedMapping.query.filter_by(
+            sensor_id=sensor_id,
+            feed_type='sensor',
+            is_active=True
+        ).first()
+        
+        if not mapping:
+            return jsonify({'success': False, 'error': f'Feed mapping not found for sensor_id={sensor_id}'}), 404
+        
+        feed_key = mapping.feed_key
+        
+        # Fetch from Adafruit
+        headers = {
+            'X-AIO-Key': ADAFRUIT_KEY,
+            'Content-Type': 'application/json'
+        }
+        
+        url = f'{ADAFRUIT_API_URL}/{ADAFRUIT_USERNAME}/feeds/{feed_key}/data'
+        response = requests.get(
+            url,
+            params={'limit': 1},  # Get latest only
+            headers=headers,
+            timeout=10
+        )
+        
+        if response.status_code != 200:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to fetch from Adafruit: {response.status_code}'
+            }), response.status_code
+        
+        data = response.json()
+        if not data or len(data) == 0:
+            return jsonify({
+                'success': False,
+                'error': 'No data from Adafruit'
+            }), 400
+        
+        latest = data[0]
+        value = float(latest.get('value', 0))
+        
+        # Save to database
+        if mapping.feed_type == 'sensor' and mapping.sensor_id:
+            sensor = Sensor.query.get(mapping.sensor_id)
+            if not sensor:
+                return jsonify({'success': False, 'error': 'Sensor not found'}), 404
+            
+            # Apply conversion
+            converted_value = value * mapping.conversion_factor
+            
+            sensor_data = SensorData(
+                sensor_id=mapping.sensor_id,
+                value=converted_value
+            )
+            db.session.add(sensor_data)
+            db.session.commit()
+            
+            logger.info(f"✅ Live fetch & saved: {feed_key} = {converted_value} for sensor {mapping.sensor_id}")
+            
+            return jsonify({
+                'success': True,
+                'feed_key': feed_key,
+                'sensor_id': mapping.sensor_id,
+                'value': converted_value,
+                'timestamp': latest.get('created_at'),
+                'message': 'Data fetched from Adafruit and saved'
+            }), 200
+        
+        elif mapping.feed_type == 'device' and mapping.device_id:
+            device = Device.query.get(mapping.device_id)
+            if not device:
+                return jsonify({'success': False, 'error': 'Device not found'}), 404
+            
+            # Update device level
+            new_level = max(0, min(100, int(value)))
+            device.level = new_level
+            device.status = 'on' if new_level > 0 else 'off'
+            db.session.commit()
+            
+            logger.info(f"✅ Live fetch & updated: {feed_key} = {new_level}% for device {mapping.device_id}")
+            
+            return jsonify({
+                'success': True,
+                'feed_key': feed_key,
+                'device_id': mapping.device_id,
+                'level': new_level,
+                'status': device.status,
+                'timestamp': latest.get('created_at'),
+                'message': 'Device data fetched from Adafruit'
+            }), 200
+        
+        else:
+            return jsonify({'success': False, 'error': 'Unknown mapping type'}), 400
+            
+    except Exception as e:
+        logger.error(f"Error fetching live Adafruit data: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/api/adafruit/simulate', methods=['POST'])
 @require_auth
 def simulate_data():
@@ -2892,6 +3327,22 @@ def sync_to_adafruit():
         logger.error(f"Error in sync endpoint: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/debug/sync', methods=['POST'])
+def debug_sync():
+    """🔧 DEBUG: Sync without auth (remove in production!)"""
+    success = sync_devices_to_adafruit()
+    
+    if success:
+        return jsonify({
+            'success': True,
+            'message': 'Sync completed - check backend logs'
+        }), 200
+    else:
+        return jsonify({
+            'success': False,
+            'error': 'Sync failed - check backend logs'
+        }), 500
+
 # =====================================================
 # RUN APP
 # =====================================================
@@ -2910,5 +3361,10 @@ if __name__ == '__main__':
         automation_thread = threading.Thread(target=automation_checker, daemon=True)
         automation_thread.start()
         logger.info("✅ Automation checker started (checks every 30 seconds)")
+        
+        # Start schedule executor
+        schedule_thread = threading.Thread(target=schedule_executor, daemon=True)
+        schedule_thread.start()
+        logger.info("✅ Schedule executor started (checks every 60 seconds)")
     
     socketio.run(app, host='0.0.0.0', port=8000, debug=False)

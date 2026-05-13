@@ -26,22 +26,35 @@ export const realtimeService = {
           socket.disconnect();
         }
 
+        console.log(`🔗 Connecting to Socket.IO at: ${SOCKET_URL}`);
+
         socket = io(SOCKET_URL, {
           reconnection: true,
           reconnectionDelay: 1000,
           reconnectionDelayMax: 5000,
           reconnectionAttempts: 5,
-          transports: ['websocket'],
+          transports: ['websocket', 'polling'],  // Fallback to polling if WebSocket fails
+          upgrade: true,  // Allow upgrade to WebSocket from polling
+          rememberUpgrade: true,  // Remember which transport worked
+          forceNew: false,
+          timeout: 10000,  // Connection timeout
         });
 
         socket.on('connect', () => {
-          console.log('✅ Connected to real-time server');
+          const transport = socket.io.engine.transport.name;
+          console.log(`✅ Connected to real-time server (transport: ${transport})`);
           resolve(socket);
         });
 
         socket.on('connect_error', (error) => {
           console.error('❌ Socket connection error:', error);
+          console.error('   Error message:', error?.message);
+          console.error('   Error code:', error?.code);
           reject(error);
+        });
+
+        socket.on('transport.open', (transport) => {
+          console.log(`📡 Transport opened: ${transport}`);
         });
 
         socket.on('disconnect', () => {

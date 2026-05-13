@@ -8,6 +8,14 @@ Seed script: Populate database with test data
 - Activity logs for admin audit trail
 """
 
+import os
+import sys
+
+# Add project root to path so imports like `from app import app` work
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+sys.path.insert(0, PROJECT_ROOT)
+
 from app import app, db
 from models import (
     User, House, Floor, Room, Device, Sensor, SensorData,
@@ -385,7 +393,7 @@ def seed_database():
                 devices_in_room = [d for d in first_room.devices if d][:3]
                 
                 if devices_in_room:
-                    # Schedule 1: Turn on light at 7:00 AM (weekdays)
+                    # Schedule 1: Turn on light at 7:00 AM for 2 hours (weekdays)
                     light_device = devices_in_room[0]
                     from datetime import time
                     
@@ -394,6 +402,7 @@ def seed_database():
                         scheduled_time=time(7, 0),
                         action_status='on',
                         action_level=100,
+                        duration_minutes=120,  # 2 hours
                         days_of_week='1,2,3,4,5',  # Mon-Fri
                         is_active=True
                     )
@@ -406,13 +415,14 @@ def seed_database():
                         scheduled_time=time(21, 0),
                         action_status='off',
                         action_level=0,
+                        duration_minutes=0,  # Forever
                         days_of_week='0,6',  # Sat-Sun
                         is_active=True
                     )
                     db.session.add(sched2)
                     schedules_created += 1
                     
-                    # Schedule 3: Turn on fan at 12:00 PM (everyday)
+                    # Schedule 3: Turn on fan at 12:00 PM for 1 hour (everyday)
                     if len(devices_in_room) > 1:
                         fan_device = devices_in_room[1]
                         sched3 = Schedule(
@@ -420,6 +430,7 @@ def seed_database():
                             scheduled_time=time(12, 0),
                             action_status='on',
                             action_level=50,
+                            duration_minutes=60,  # 1 hour
                             days_of_week='0,1,2,3,4,5,6',  # Every day
                             is_active=True
                         )
@@ -432,13 +443,14 @@ def seed_database():
                             scheduled_time=time(17, 0),
                             action_status='off',
                             action_level=0,
+                            duration_minutes=0,  # Forever
                             days_of_week='0,1,2,3,4,5,6',  # Every day
                             is_active=True
                         )
                         db.session.add(sched4)
                         schedules_created += 1
                     
-                    # Schedule 5: Turn on AC at 6:00 AM (weekdays only)
+                    # Schedule 5: Turn on AC at 6:00 AM for 12 hours (weekdays only)
                     if len(devices_in_room) > 2:
                         ac_device = devices_in_room[2]
                         sched5 = Schedule(
@@ -446,6 +458,7 @@ def seed_database():
                             scheduled_time=time(6, 0),
                             action_status='on',
                             action_level=22,  # 22°C target
+                            duration_minutes=720,  # 12 hours
                             days_of_week='1,2,3,4,5',  # Mon-Fri
                             is_active=True
                         )
@@ -458,6 +471,7 @@ def seed_database():
                             scheduled_time=time(18, 0),
                             action_status='off',
                             action_level=0,
+                            duration_minutes=0,  # Forever
                             days_of_week='1,2,3,4,5',  # Mon-Fri
                             is_active=False  # Disabled by default
                         )

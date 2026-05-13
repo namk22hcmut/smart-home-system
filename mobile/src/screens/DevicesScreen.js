@@ -1,6 +1,7 @@
 /**
  * UserDevicesScreen.js - User Device Management
  * Allow users to create, edit, delete devices in their room
+ * Integrated with Adafruit IO for real-time device control
  */
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -19,6 +20,7 @@ import {
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { apiService } from '../services/api';
+import adafruitService from '../services/adafruit';
 import CustomSlider from '../components/CustomSlider';
 
 export default function UserDevicesScreen({ navigation, route }) {
@@ -36,6 +38,11 @@ export default function UserDevicesScreen({ navigation, route }) {
     status: 'off',
     level: '0',
   });
+  
+  // Adafruit Integration
+  const [adafruitMappings, setAdafruitMappings] = useState({});
+  const [adafruitData, setAdafruitData] = useState({});
+  const [loadingAdafruit, setLoadingAdafruit] = useState(false);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -43,6 +50,34 @@ export default function UserDevicesScreen({ navigation, route }) {
       isMounted.current = false;
     };
   }, []);
+
+  // 📌 REMOVED: Auto-fetch Adafruit data on mount
+  // Now: Only fetch on-demand (user refresh or control action)
+
+  // Fetch Adafruit feed data for all devices (ON-DEMAND ONLY)
+  // Called when:
+  //   1. User refreshes devices list (pull-down)
+  //   2. User controls device (toggle/slider)
+  // Never called automatically!
+  const fetchAdafruitData = async () => {
+    setLoadingAdafruit(true);
+    try {
+      // Fetch fan data from Adafruit
+      const fanData = await adafruitService.getFanData();
+      
+      if (fanData.success) {
+        setAdafruitData({
+          fan: fanData.latestValue,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+        console.log('✅ Loaded fan data from Adafruit');
+      }
+    } catch (error) {
+      console.error('❌ Error fetching Adafruit data:', error.message);
+    } finally {
+      setLoadingAdafruit(false);
+    }
+  };
 
   const deviceTypes = [
     'light',
@@ -68,6 +103,9 @@ export default function UserDevicesScreen({ navigation, route }) {
       if (response && response.success) {
         setDevices(response.data || []);
         console.log('✅ Loaded', (response.data || []).length, 'devices');
+        
+        // Also refresh Adafruit data
+        await fetchAdafruitData();
       }
     } catch (error) {
       console.error('❌ Error loading devices:', error);
@@ -294,6 +332,11 @@ export default function UserDevicesScreen({ navigation, route }) {
     // Normalize item properties
     const deviceStatus = String(item.status || 'off').toLowerCase();
     const deviceLevel = Number(item.level) || 0;
+    
+    // Get Adafruit data for this device
+    const adafruitInfo = adafruitData[itemId] || null;
+    const lastValue = adafruitInfo?.latest?.value;
+    const lastTimestamp = adafruitInfo?.latest?.created_at;
 
     return (
     <View style={styles.deviceCard}>
@@ -301,6 +344,12 @@ export default function UserDevicesScreen({ navigation, route }) {
         <View style={styles.deviceInfo}>
           <Text style={styles.deviceName}>⚙️ {String(item.name || item.device_name || 'Unknown')}</Text>
           <Text style={styles.deviceType}>{getDeviceTypeDisplay(String(item.type || item.device_type || 'other'))}</Text>
+          {adafruitInfo && (
+            <Text style={styles.adafruitStatus}>
+              📡 Adafruit: {lastValue !== null ? lastValue : 'No data'}
+              {lastTimestamp && <Text style={styles.timestamp}>  ({new Date(lastTimestamp).toLocaleTimeString()})</Text>}
+            </Text>
+          )}
         </View>
         <View style={styles.deviceActions}>
           <TouchableOpacity
@@ -557,6 +606,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#999',
     marginTop: 2,
+  },
+  adafruitStatus: {
+    fontSize: 12,
+    color: '#27ae60',
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  timestamp: {
+    fontSize: 11,
+    color: '#7f8c8d',
   },
   deviceActions: {
     flexDirection: 'row',

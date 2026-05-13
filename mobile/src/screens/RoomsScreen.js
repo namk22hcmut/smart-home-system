@@ -36,16 +36,7 @@ export default function UserRoomsScreen({ navigation, route }) {
     description: '',
   });
 
-  // Sensor CRUD states
-  const [sensorModalVisible, setSensorModalVisible] = useState(false);
-  const [editingSensor, setEditingSensor] = useState(null);
-  const [currentRoomForSensor, setCurrentRoomForSensor] = useState(null);
-  const [sensorFormData, setSensorFormData] = useState({
-    sensor_name: '',
-    sensor_type: 'temperature',
-  });
 
-  const sensorTypes = ['temperature', 'humidity', 'motion', 'light', 'co2', 'pressure', 'other'];
 
   // Cleanup on unmount
   useEffect(() => {
@@ -95,7 +86,7 @@ export default function UserRoomsScreen({ navigation, route }) {
     }
   };
 
-  // Load sensors for a specific room
+  // Load sensors for a specific room (just fetch, don't store - we navigate to SensorsScreen instead)
   const loadSensors = async (roomId) => {
     if (!roomId) {
       console.warn('⚠️ loadSensors called with invalid roomId:', roomId);
@@ -112,111 +103,7 @@ export default function UserRoomsScreen({ navigation, route }) {
       }
     } catch (error) {
       console.error(`❌ Error loading sensors for room ${roomId}:`, error);
-      // Don't show alert for sensors - they're optional
     }
-  };
-
-  // Create new sensor
-  const createSensor = async () => {
-    if (!sensorFormData.sensor_name.trim()) {
-      Alert.alert('Error', 'Please enter sensor name');
-      return;
-    }
-
-    try {
-      const response = await apiService.post('/sensors', {
-        room_id: currentRoomForSensor,
-        sensor_name: sensorFormData.sensor_name.trim(),
-        sensor_type: sensorFormData.sensor_type,
-      });
-
-      if (response && response.success) {
-        Alert.alert('Success', 'Sensor added!');
-        resetSensorForm();
-        loadSensors(currentRoomForSensor);
-      }
-    } catch (error) {
-      Alert.alert('Error', error.response?.data?.error || 'Failed to create sensor');
-    }
-  };
-
-  // Update sensor
-  const updateSensor = async () => {
-    if (!sensorFormData.sensor_name.trim()) {
-      Alert.alert('Error', 'Please enter sensor name');
-      return;
-    }
-
-    try {
-      const response = await apiService.put(`/sensors/${editingSensor.id}`, {
-        sensor_name: sensorFormData.sensor_name,
-        sensor_type: sensorFormData.sensor_type,
-      });
-
-      if (response && response.success) {
-        Alert.alert('Success', 'Sensor updated!');
-        resetSensorForm();
-        loadSensors(currentRoomForSensor);
-      }
-    } catch (error) {
-      Alert.alert('Error', error.message || 'Failed to update sensor');
-    }
-  };
-
-  // Delete sensor
-  const deleteSensor = async (sensorId) => {
-    Alert.alert(
-      'Delete Sensor',
-      'Delete this sensor?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Delete',
-          onPress: async () => {
-            try {
-              const response = await apiService.delete(`/sensors/${sensorId}`);
-              if (response && response.success) {
-                Alert.alert('Success', 'Sensor deleted!');
-                loadSensors(currentRoomForSensor);
-              }
-            } catch (error) {
-              Alert.alert('Error', error.message || 'Failed to delete sensor');
-            }
-          },
-          style: 'destructive',
-        },
-      ]
-    );
-  };
-
-  // Open sensor modal to add
-  const openAddSensorModal = (roomId) => {
-    setEditingSensor(null);
-    setCurrentRoomForSensor(roomId);
-    setSensorFormData({ sensor_name: '', sensor_type: 'temperature' });
-    setSensorModalVisible(true);
-  };
-
-  // Open sensor modal to edit
-  const openEditSensorModal = (sensor, roomId) => {
-    setEditingSensor(sensor);
-    setCurrentRoomForSensor(roomId);
-    setSensorFormData({
-      sensor_name: sensor.name,
-      sensor_type: sensor.type || 'temperature',
-    });
-    setSensorModalVisible(true);
-  };
-
-  // Reset sensor form
-  const resetSensorForm = () => {
-    setSensorFormData({ sensor_name: '', sensor_type: 'temperature' });
-    setEditingSensor(null);
-    setCurrentRoomForSensor(null);
-    setSensorModalVisible(false);
   };
 
   // Create new room
@@ -362,52 +249,9 @@ export default function UserRoomsScreen({ navigation, route }) {
     return types[type] || type;
   };
 
-  // Get sensor type display with icon
-  const getSensorTypeDisplay = (type) => {
-    const types = {
-      temperature: '🌡️ Temperature',
-      humidity: '💧 Humidity',
-      motion: '🚨 Motion',
-      light: '💡 Light',
-      co2: '🌫️ CO2',
-      pressure: '🔰 Pressure',
-      other: '📊 Other',
-    };
-    return types[type] || type;
-  };
 
-  // Render sensor item
-  const renderSensorItem = (sensorItem, roomId) => (
-    <View style={styles.sensorCard}>
-      <View style={styles.sensorHeader}>
-        <View style={styles.sensorInfo}>
-          <Text style={styles.sensorName}>{getSensorTypeDisplay(sensorItem.type || 'other')}</Text>
-          <Text style={styles.sensorNameDisplay}>📝 {sensorItem.name || 'Unknown'}</Text>
-          {sensorItem.value !== null && sensorItem.value !== undefined ? (
-            <Text style={styles.sensorValueDisplay}>
-              📊 Value: {Number(sensorItem.value).toFixed(1)} {sensorItem.unit}
-            </Text>
-          ) : (
-            <Text style={styles.sensorNoValue}>No data yet</Text>
-          )}
-        </View>
-        <View style={styles.sensorActions}>
-          <TouchableOpacity
-            style={styles.sensorEditBtn}
-            onPress={() => openEditSensorModal(sensorItem, roomId)}
-          >
-            <Text style={styles.sensorEditBtnText}>✎</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.sensorDeleteBtn}
-            onPress={() => deleteSensor(sensorItem.id)}
-          >
-            <Text style={styles.sensorDeleteBtnText}>🗑</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
-  );
+
+
 
   // Render room item with optional sensor section
   const renderRoomItem = ({ item }) => {
@@ -457,42 +301,24 @@ export default function UserRoomsScreen({ navigation, route }) {
           <Text style={styles.sensorsCount}>📊 {roomSensors.length}</Text>
         </View>
 
-        {/* Sensors section - shown when expanded */}
-        {isExpanded && (
-          <View style={styles.sensorsSection}>
-            <View style={styles.sensorsSectionHeader}>
-              <Text style={styles.sectionTitle}>📊 Sensors:</Text>
-              <TouchableOpacity
-                style={styles.addSensorBtn}
-                onPress={() => openAddSensorModal(item.id)}
-              >
-                <Text style={styles.addSensorBtnText}>+ Add</Text>
-              </TouchableOpacity>
-            </View>
-            {roomSensors.length > 0 ? (
-              <View style={styles.sensorsList}>
-                {roomSensors.map((sensor) => (
-                  <View key={sensor.id} style={styles.sensorCard}>
-                    {renderSensorItem(sensor, item.id)}
-                  </View>
-                ))}
-              </View>
-            ) : (
-              <Text style={styles.noSensorsText}>No sensors</Text>
-            )}
-          </View>
-        )}
+
 
         {/* Navigation buttons */}
         <View style={styles.buttonRow}>
           <TouchableOpacity
-            style={[styles.navigateBtn, { flex: 1, marginRight: 6 }]}
+            style={[styles.navigateBtn, { flex: 1, marginRight: 4 }]}
             onPress={() => navigation.navigate('UserDevices', { roomId: item.id, roomName: item.name })}
           >
             <Text style={styles.navigateBtnText}>👉 Devices</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.navigateBtn, { flex: 1, marginLeft: 6, backgroundColor: '#9b59b6' }]}
+            style={[styles.navigateBtn, { flex: 1, marginHorizontal: 4, backgroundColor: '#3498db' }]}
+            onPress={() => navigation.navigate('UserSensors', { roomId: item.id, roomName: item.name })}
+          >
+            <Text style={styles.navigateBtnText}>📊 Sensors</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.navigateBtn, { flex: 1, marginLeft: 4, backgroundColor: '#9b59b6' }]}
             onPress={() => navigation.navigate('AutomationRules', { roomId: item.id, roomName: item.name })}
           >
             <Text style={styles.navigateBtnText}>⚙️ Automation</Text>
@@ -605,62 +431,7 @@ export default function UserRoomsScreen({ navigation, route }) {
         </View>
       </Modal>
 
-      {/* Add/Edit Sensor Modal */}
-      <Modal visible={sensorModalVisible} transparent animationType="slide">
-        <View style={styles.modalContainer}>
-          <ScrollView style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {editingSensor ? '✏️ Edit Sensor' : '📊 New Sensor'}
-              </Text>
-              <TouchableOpacity onPress={resetSensorForm}>
-                <Text style={styles.closeBtn}>✕</Text>
-              </TouchableOpacity>
-            </View>
 
-            {/* Form */}
-            <View style={styles.formContainer}>
-              <Text style={styles.label}>Sensor Name *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g., Room Temperature, Humidity Monitor"
-                value={sensorFormData.sensor_name}
-                onChangeText={(text) => setSensorFormData({ ...sensorFormData, sensor_name: text })}
-              />
-
-              <Text style={styles.label}>Sensor Type</Text>
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={sensorFormData.sensor_type}
-                  onValueChange={(value) => setSensorFormData({ ...sensorFormData, sensor_type: value })}
-                  style={styles.picker}
-                >
-                  {sensorTypes.map((type) => (
-                    <Picker.Item key={type} label={getSensorTypeDisplay(type)} value={type} />
-                  ))}
-                </Picker>
-              </View>
-
-              <View style={styles.buttonGroup}>
-                <TouchableOpacity
-                  style={[styles.btn, styles.saveBtn]}
-                  onPress={editingSensor ? updateSensor : createSensor}
-                >
-                  <Text style={styles.saveBtnText}>
-                    {editingSensor ? 'Update' : 'Add'}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.btn, styles.cancelBtn]}
-                  onPress={resetSensorForm}
-                >
-                  <Text style={styles.cancelBtnText}>Cancel</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </ScrollView>
-        </View>
-      </Modal>
     </View>
   );
 }

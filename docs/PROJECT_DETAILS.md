@@ -1,6 +1,6 @@
 # 🏠 Smart Home Project - Detailed Overview
 
-**Version:** 3.1 | **Date:** May 9, 2026 | **Status:** ✅ Production Ready
+**Version:** 3.2 | **Date:** May 12, 2026 | **Status:** ✅ Production Ready + Schedule Executor ✅
 
 ---
 
@@ -12,6 +12,8 @@ A complete **IoT Smart Home Management System** with:
 - Real-time sync via WebSocket & MQTT
 - Device control (on/off + level 0-100%)
 - Automation rules with multi-condition logic
+- Device scheduling with duration constraints ⭐ NEW
+- Real-time schedule executor (background thread) ⭐ NEW
 - 16 database tables in SQLite
 - 45+ REST API endpoints
 
@@ -30,6 +32,7 @@ A complete **IoT Smart Home Management System** with:
 | **MQTT** | ✅ | Adafruit IO integration |
 | **Notifications** | ✅ | Real-time system alerts |
 | **Automation Rules** | ✅ | Multi-condition AND/OR logic |
+| **Device Scheduling** | ✅ | Real-time schedule executor with duration constraints |
 | **Admin Panel** | ✅ | User management & stats |
 
 ---
@@ -75,7 +78,13 @@ user (users)
 │  │  ├─ room (rooms in floor)
 │  │  │  ├─ device (smart devices)
 │  │  │  │  ├─ id, name, type, status, level (0-100)
-│  │  │  │  └─ room_id, created_at, updated_at
+│  │  │  │  ├─ room_id, created_at, updated_at
+│  │  │  │  └─ schedule
+│  │  │  │     ├─ id, device_id, scheduled_time (HH:MM)
+│  │  │  │     ├─ action_status (on/off), action_level (0-100)
+│  │  │  │     ├─ duration_minutes (0=forever, N=run N minutes)
+│  │  │  │     ├─ days_of_week (0-6 comma-sep), is_active
+│  │  │  │     └─ last_triggered_at (prevent duplicate execution)
 │  │  │  └─ sensor (temperature, humidity, etc)
 │  │  │     ├─ id, name, type, unit, room_id
 │  │  │     └─ sensor_data (historical readings)
@@ -177,6 +186,12 @@ POST   /api/automation-rules/{rule_id}/toggle
 POST   /api/automation-rules/{rule_id}/test
 ```
 
+### Device Schedules (2)
+```
+POST   /api/devices/{device_id}/schedules      # Create schedule with duration
+PUT    /api/schedules/{schedule_id}            # Update schedule (including duration)
+```
+
 ### Adafruit Mappings (6)
 ```
 GET    /api/adafruit/mappings
@@ -211,8 +226,8 @@ GET    /api/admin/stats          # System stats
 2. **HousesScreen** - CRUD houses
 3. **FloorsScreen** - CRUD floors
 4. **RoomsScreen** - CRUD rooms + Sensors
-5. **DevicesScreen** - CRUD devices + Control (on/off + slider)
-6. **AutomationRulesScreen** - Create/manage automation
+5. **DevicesScreen** - CRUD devices + Control (on/off + slider) + Schedule management
+6. **AutomationRulesScreen** - Create/manage automation + Schedules
 
 **Admin Screens:**
 - AdminPanel - Admin dashboard
@@ -279,6 +294,7 @@ EXPO_PUBLIC_API_URL=http://localhost:8000/api           # Localhost
 | **Database** | SQLite | Latest |
 | **Real-time** | Socket.IO + Flask-SocketIO | Latest |
 | **MQTT** | Paho-mqtt | 2.1.0 |
+| **Scheduling** | Python threading | Built-in |
 | **Auth** | Flask-JWT-Extended | Latest |
 | **Mobile** | React Native + Expo | Latest |
 | **Navigation** | React Navigation | 6.x |
@@ -311,6 +327,47 @@ THEN turn_on(AC) with level=70%
 Supported operators: >, <, >=, <=, ==, !=
 Supported logic: AND, OR
 Evaluation: Every 30 seconds (background)
+```
+
+### Device Schedules ⭐ NEW
+```
+Schedule = Time + Action + Duration + Days
+
+Example:
+AT 8:00 AM → turn_on(Light) at 100% for 120 minutes
+Then automatically off at 10:00 AM
+
+Fields:
+- scheduled_time: HH:MM format (14:30)
+- action_status: on | off
+- action_level: 0-100 (intensity/speed)
+- duration_minutes: 0 = forever, N = run for N minutes
+- days_of_week: 0-6 comma-separated (0=Sunday)
+- is_active: Enable/disable schedule
+- last_triggered_at: Prevents duplicate same-day execution
+
+Execution: Every 60 seconds via background thread
+Status: Prevents re-triggering by tracking last execution date
+```
+
+### Device Schedules
+```
+Schedule = Time + Action + Duration + Days
+
+Example:
+AT 8:00 AM → turn_on(Light) at 100% for 120 minutes
+Then auto-off at 9:00 AM (8:00 + 120 minutes)
+
+Fields:
+- scheduled_time: HH:MM (14:30)
+- action_status: on|off
+- action_level: 0-100
+- duration_minutes: 0=forever, N=run for N minutes
+- days_of_week: 0-6 comma-separated (0=Sunday)
+- is_active: Enable/disable schedule
+
+Execution: Every 60 seconds (real-time background thread)
+Prevents duplicates: Tracks last_triggered_at per day
 ```
 
 ### Real-time Flow
@@ -481,9 +538,55 @@ curl -X POST http://localhost:8000/api/device-status \
 
 ---
 
+## � Schedule Executor Implementation
+
+### How It Works
+1. **Background Thread** - `schedule_executor()` runs every 60 seconds
+2. **Time Matching** - Checks if current time matches `scheduled_time` (±60 second window)
+3. **Day Verification** - Confirms today is in `days_of_week`
+4. **Duplicate Prevention** - Checks `last_triggered_at` to prevent same-day re-execution
+5. **Device Execution** - Sets `device.status` and `device.level`
+6. **Activity Logging** - Logs to `DeviceActivityLog` with reason
+7. **Duration Tracking** - If `duration_minutes > 0`, logs when auto-off should occur
+
+### Testing
+```bash
+# Create test schedules for immediate execution (1-2 minutes from now)
+python create_test_schedules.py
+
+# Start backend to see executor in action
+python app.py
+
+# Watch logs for:
+# "✅ Schedule executed: Device X → on"
+# "⏱️ Device will auto-off at HH:MM"
+```
+
+### API Examples
+**Create schedule with 30-minute duration:**
+```bash
+POST /api/devices/5/schedules
+{
+  "scheduled_time": "14:30",
+  "action_status": "on",
+  "action_level": 75,
+  "duration_minutes": 30,
+  "days_of_week": "0,1,2,3,4,5,6"
+}
+```
+
+**Update schedule duration:**
+```bash
+PUT /api/schedules/1
+{
+  "duration_minutes": 60
+}
+```
+
 ## 🚀 Future Enhancements
 
-- Add energy analytics dashboard
+- Auto-off implementation after duration expires
+- Energy analytics dashboard
 - Historical data visualization
 - Voice control integration
 - Machine learning for automation suggestions
@@ -491,6 +594,8 @@ curl -X POST http://localhost:8000/api/device-status \
 - Multi-user sharing of houses
 - Video stream integration for cameras
 - Backup & recovery system
+- Schedule conflict detection
+- Recurring schedule templates
 
 ---
 
