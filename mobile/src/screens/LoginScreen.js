@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
+import theme from '../styles/theme';
 
 export default function LoginScreen({ navigation }) {
   const [username, setUsername] = useState('');
@@ -72,7 +73,7 @@ export default function LoginScreen({ navigation }) {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={theme.colors.card} />
           ) : (
             <Text style={styles.buttonText}>Login</Text>
           )}
@@ -94,12 +95,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.colors.background,
     padding: 20,
   },
   card: {
     width: '100%',
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.card,
     borderRadius: 12,
     padding: 24,
     shadowColor: '#000',
@@ -111,27 +112,27 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#007AFF',
+    color: theme.colors.primary,
     marginBottom: 8,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: theme.colors.gray1,
     marginBottom: 24,
     textAlign: 'center',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: theme.colors.gray2,
     borderRadius: 8,
     padding: 12,
     marginBottom: 16,
     fontSize: 16,
-    backgroundColor: '#fafafa',
+    backgroundColor: theme.colors.background,
   },
   button: {
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.colors.primary,
     borderRadius: 8,
     padding: 14,
     marginTop: 8,
@@ -141,7 +142,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    color: '#fff',
+    color: theme.colors.card,
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -151,11 +152,11 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   footerText: {
-    color: '#666',
+    color: theme.colors.gray1,
     fontSize: 14,
   },
   linkText: {
-    color: '#007AFF',
+    color: theme.colors.primary,
     fontSize: 14,
     fontWeight: 'bold',
   },

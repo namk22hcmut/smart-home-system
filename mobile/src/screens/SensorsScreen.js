@@ -16,9 +16,11 @@ import {
   TextInput,
   ScrollView,
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { apiService } from '../services/api';
 import adafruitService from '../services/adafruit';
+import theme from '../styles/theme';
 
 export default function UserSensorsScreen({ navigation, route }) {
   const { roomId, roomName } = route.params;
@@ -36,6 +38,21 @@ export default function UserSensorsScreen({ navigation, route }) {
   });
 
   const sensorTypes = ['temperature', 'humidity', 'motion', 'light', 'co2', 'pressure', 'other'];
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      title: 'Sensors',
+      headerStyle: {
+        backgroundColor: theme.colors.primary,
+      },
+      headerTintColor: theme.colors.card,
+      headerTitleStyle: {
+        fontWeight: '700',
+        color: theme.colors.card,
+      },
+    });
+  }, [navigation]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -172,7 +189,7 @@ export default function UserSensorsScreen({ navigation, route }) {
       
       if (result.success) {
         console.log(`✅ [UPDATE] Success! New value:`, result.data);
-        Alert.alert('Success', `✅ Updated: ${sensor.name} = ${result.data.value}`);
+        Alert.alert('Success', `Updated: ${sensor.name} = ${result.data.value}`);
         // Reload sensors to show updated value
         console.log(`🔄 [UPDATE] Reloading sensors...`);
         await loadSensors(false);
@@ -241,15 +258,28 @@ export default function UserSensorsScreen({ navigation, route }) {
   // Get sensor type display with icon
   const getSensorTypeDisplay = (type) => {
     const types = {
-      temperature: '🌡️ Temperature',
-      humidity: '💧 Humidity',
-      motion: '🚨 Motion',
-      light: '💡 Light',
-      co2: '🌫️ CO2',
-      pressure: '🔰 Pressure',
-      other: '📊 Other',
+      temperature: 'Temperature',
+      humidity: 'Humidity',
+      motion: 'Motion',
+      light: 'Light',
+      co2: 'CO2',
+      pressure: 'Pressure',
+      other: 'Other',
     };
     return types[type] || type;
+  };
+
+  const getSensorIconName = (type) => {
+    const icons = {
+      temperature: 'thermostat',
+      humidity: 'opacity',
+      motion: 'sensors',
+      light: 'wb-sunny',
+      co2: 'air',
+      pressure: 'speed',
+      other: 'sensors',
+    };
+    return icons[type] || 'sensors';
   };
 
   // Render sensor item
@@ -260,12 +290,16 @@ export default function UserSensorsScreen({ navigation, route }) {
     return (
       <View style={styles.sensorCard}>
         <View style={styles.sensorHeader}>
+          <View style={styles.sensorIconWrap}>
+            <MaterialIcons name={getSensorIconName(item.type || 'other')} size={22} color={theme.colors.text} />
+          </View>
+
           <View style={styles.sensorInfo}>
             <Text style={styles.sensorType}>{getSensorTypeDisplay(item.type || 'other')}</Text>
-            <Text style={styles.sensorName}>📝 {item.name || 'Unknown'}</Text>
+            <Text style={styles.sensorName}>{item.name || 'Unknown'}</Text>
             {item.value !== null && item.value !== undefined ? (
               <Text style={styles.sensorValue}>
-                📊 Value: {Number(item.value).toFixed(1)} {item.unit}
+                Value: {Number(item.value).toFixed(1)} {item.unit}
               </Text>
             ) : (
               <Text style={styles.sensorNoValue}>No data yet</Text>
@@ -283,7 +317,7 @@ export default function UserSensorsScreen({ navigation, route }) {
               {isUpdating ? (
                 <ActivityIndicator size="small" color="white" />
               ) : (
-                <Text style={styles.updateBtnText}>🔄</Text>
+                <MaterialIcons name="refresh" size={18} color={theme.colors.card} />
               )}
             </TouchableOpacity>
             <TouchableOpacity
@@ -293,13 +327,13 @@ export default function UserSensorsScreen({ navigation, route }) {
                 openEditModal(item);
               }}
             >
-              <Text style={styles.editBtnText}>✎</Text>
+              <MaterialIcons name="edit" size={18} color={theme.colors.card} />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.deleteBtn}
               onPress={() => deleteSensor(item.id)}
             >
-              <Text style={styles.deleteBtnText}>🗑</Text>
+              <MaterialIcons name="delete-outline" size={18} color={theme.colors.card} />
             </TouchableOpacity>
           </View>
         </View>
@@ -310,7 +344,7 @@ export default function UserSensorsScreen({ navigation, route }) {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#e74c3c" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={styles.loadingText}>Loading sensors...</Text>
       </View>
     );
@@ -318,41 +352,41 @@ export default function UserSensorsScreen({ navigation, route }) {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerText}>📊 {roomName}</Text>
+      <View style={styles.contentHeader}>
+        <Text style={styles.sectionTitle} numberOfLines={1}>{roomName}</Text>
+        <TouchableOpacity style={styles.addBtn} onPress={openAddModal} activeOpacity={0.86}>
+          <MaterialIcons name="add" size={20} color={theme.colors.card} />
+          <Text style={styles.addBtnText}>Add</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Add Sensor Button */}
-      <TouchableOpacity style={styles.addBtn} onPress={openAddModal}>
-        <Text style={styles.addBtnText}>+ Add Sensor</Text>
-      </TouchableOpacity>
-
-      {/* Sensors List */}
       <FlatList
         data={sensors}
         renderItem={renderSensorItem}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconWrap}>
+              <MaterialIcons name="sensors" size={34} color={theme.colors.gray2} />
+            </View>
             <Text style={styles.emptyText}>No sensors yet</Text>
-            <Text style={styles.emptySubtext}>Tap "+ Add Sensor" to create one</Text>
+            <Text style={styles.emptySubtext}>Add the first sensor for this room</Text>
           </View>
         }
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadSensors(false)} />}
       />
 
-      {/* Add/Edit Modal */}
       <Modal visible={modalVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
-          <ScrollView style={styles.modalContent}>
+          <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalScrollContent}>
+            <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {editingSensor ? '✏️ Edit Sensor' : '📊 New Sensor'}
+                {editingSensor ? 'Edit Sensor' : 'New Sensor'}
               </Text>
-              <TouchableOpacity onPress={resetForm}>
-                <Text style={styles.closeBtn}>✕</Text>
+              <TouchableOpacity onPress={resetForm} accessibilityLabel="Close modal">
+                <MaterialIcons name="close" size={22} color={theme.colors.gray1} />
               </TouchableOpacity>
             </View>
 
@@ -383,6 +417,7 @@ export default function UserSensorsScreen({ navigation, route }) {
                 <TouchableOpacity
                   style={[styles.btn, styles.saveBtn]}
                   onPress={editingSensor ? updateSensor : createSensor}
+                  activeOpacity={0.86}
                 >
                   <Text style={styles.saveBtnText}>
                     {editingSensor ? 'Update' : 'Add'}
@@ -391,6 +426,7 @@ export default function UserSensorsScreen({ navigation, route }) {
                 <TouchableOpacity
                   style={[styles.btn, styles.cancelBtn]}
                   onPress={resetForm}
+                  activeOpacity={0.86}
                 >
                   <Text style={styles.cancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
@@ -406,7 +442,7 @@ export default function UserSensorsScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.colors.background,
   },
   centerContainer: {
     flex: 1,
@@ -414,126 +450,157 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    marginTop: 10,
+    marginTop: 12,
     fontSize: 14,
-    color: '#666',
+    fontWeight: '600',
+    color: theme.colors.gray1,
   },
-  header: {
-    backgroundColor: '#3498db',
-    padding: 15,
+  contentHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
-  headerText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+  sectionTitle: {
+    color: theme.colors.primary,
+    fontSize: 22,
+    fontWeight: '700',
+    flex: 1,
+    minWidth: 0,
+    marginRight: 12,
   },
   addBtn: {
-    backgroundColor: '#27ae60',
-    margin: 15,
-    padding: 15,
-    borderRadius: 8,
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
   },
   addBtnText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: theme.colors.card,
+    fontSize: 14,
+    fontWeight: '700',
   },
   listContent: {
-    paddingHorizontal: 15,
+    paddingHorizontal: 16,
     paddingBottom: 20,
   },
   sensorCard: {
-    backgroundColor: 'white',
-    borderRadius: 8,
+    backgroundColor: theme.colors.card,
+    borderRadius: 22,
     marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#3498db',
-    padding: 15,
+    padding: 18,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
     elevation: 2,
   },
   sensorHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-start',
+  },
+  sensorIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: theme.colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    marginTop: 2,
   },
   sensorInfo: {
     flex: 1,
   },
   sensorType: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: 6,
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.colors.gray2,
+    marginBottom: 4,
+    textTransform: 'uppercase',
   },
   sensorName: {
-    fontSize: 14,
-    color: '#555',
-    marginBottom: 4,
-    fontWeight: '500',
+    fontSize: 20,
+    color: theme.colors.primary,
+    marginBottom: 6,
+    fontWeight: '700',
   },
   sensorValue: {
-    fontSize: 13,
-    color: '#27ae60',
-    marginBottom: 2,
+    fontSize: 14,
+    color: theme.colors.accent,
+    marginBottom: 0,
     fontWeight: '600',
   },
   sensorNoValue: {
-    fontSize: 11,
-    color: '#bdc3c7',
+    fontSize: 13,
+    color: theme.colors.gray2,
     fontStyle: 'italic',
   },
   sensorActions: {
     flexDirection: 'row',
     gap: 8,
+    marginLeft: 10,
   },
   updateBtn: {
-    backgroundColor: '#27ae60',
-    padding: 8,
-    borderRadius: 4,
-    minWidth: 36,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: theme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   updateBtnLoading: {
     opacity: 0.6,
   },
-  updateBtnText: {
-    color: 'white',
-    fontSize: 16,
-  },
   editBtn: {
-    backgroundColor: '#3498db',
-    padding: 8,
-    borderRadius: 4,
-  },
-  editBtnText: {
-    color: 'white',
-    fontSize: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: theme.colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   deleteBtn: {
-    backgroundColor: '#e74c3c',
-    padding: 8,
-    borderRadius: 4,
-  },
-  deleteBtnText: {
-    color: 'white',
-    fontSize: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: theme.colors.accent,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   emptyContainer: {
     alignItems: 'center',
     paddingTop: 60,
   },
+  emptyIconWrap: {
+    width: 74,
+    height: 74,
+    borderRadius: 999,
+    backgroundColor: theme.colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 1,
+  },
   emptyText: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#666',
+    fontWeight: '700',
+    color: theme.colors.primary,
+    marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#999',
-    marginTop: 8,
+    fontWeight: '600',
+    color: theme.colors.gray2,
   },
 
   // Modal styles
@@ -543,11 +610,23 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
+    backgroundColor: theme.colors.card,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 20,
+    paddingTop: 10,
     maxHeight: '80%',
+  },
+  modalScrollContent: {
+    paddingBottom: 28,
+  },
+  modalHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: theme.colors.gray2,
+    alignSelf: 'center',
+    marginBottom: 16,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -557,36 +636,32 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  closeBtn: {
-    fontSize: 24,
-    color: '#999',
+    fontWeight: '700',
+    color: theme.colors.primary,
   },
   formContainer: {
     marginBottom: 30,
   },
   label: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '700',
+    color: theme.colors.primary,
     marginBottom: 6,
     marginTop: 12,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
+    borderColor: theme.colors.gray2,
+    borderRadius: 14,
     padding: 12,
     fontSize: 14,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: theme.colors.background,
   },
   pickerContainer: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
-    backgroundColor: '#f9f9f9',
+    borderColor: theme.colors.gray2,
+    borderRadius: 14,
+    backgroundColor: theme.colors.background,
     overflow: 'hidden',
   },
   picker: {
@@ -600,23 +675,23 @@ const styles = StyleSheet.create({
   btn: {
     flex: 1,
     padding: 14,
-    borderRadius: 6,
+    borderRadius: 14,
     alignItems: 'center',
   },
   saveBtn: {
-    backgroundColor: '#27ae60',
+    backgroundColor: theme.colors.primary,
   },
   saveBtnText: {
-    color: 'white',
+    color: theme.colors.card,
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   cancelBtn: {
-    backgroundColor: '#ecf0f1',
+    backgroundColor: theme.colors.background,
   },
   cancelBtnText: {
-    color: '#333',
+    color: theme.colors.primary,
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
 });

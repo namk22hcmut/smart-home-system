@@ -5,6 +5,7 @@ import React, { useContext } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { theme } from './src/styles/theme';
 
 // Import Auth Context
 import { AuthProvider, AuthContext } from './src/context/AuthContext';
@@ -44,9 +45,9 @@ function UserStack() {
       screenOptions={{
         headerShown: true,
         headerStyle: {
-          backgroundColor: '#f5f5f5',
+          backgroundColor: theme.colors.background,
         },
-        headerTintColor: '#007AFF',
+        headerTintColor: theme.colors.primary,
         headerTitleStyle: {
           fontWeight: 'bold',
         },
@@ -95,6 +96,9 @@ function UserStack() {
         component={DevicesScreen}
         options={({ route }) => ({
           title: route.params?.roomName || 'Devices',
+          headerShown: true,
+          headerBackTitleVisible: false,
+          headerShadowVisible: false,
         })}
       />
       <Stack.Screen 
@@ -146,9 +150,9 @@ function AdminStack() {
       screenOptions={{
         headerShown: true,
         headerStyle: {
-          backgroundColor: '#2c3e50',
+          backgroundColor: theme.colors.primary,
         },
-        headerTintColor: '#fff',
+        headerTintColor: theme.colors.card,
         headerTitleStyle: {
           fontWeight: 'bold',
         },
@@ -225,9 +229,9 @@ function MainStack() {
       screenOptions={{
         headerShown: true,
         headerStyle: {
-          backgroundColor: '#f5f5f5',
+          backgroundColor: theme.colors.background,
         },
-        headerTintColor: '#007AFF',
+        headerTintColor: theme.colors.primary,
         headerTitleStyle: {
           fontWeight: 'bold',
         },
@@ -295,7 +299,7 @@ function AppContent() {
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     );
   }

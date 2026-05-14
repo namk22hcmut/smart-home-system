@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import { apiService } from '../services/api';
+import { theme } from '../styles/theme';
 
 // Extracted NotificationItem component (outside main component)
 // This prevents React from recreating it on every render
@@ -142,18 +143,23 @@ const NotificationCenter = ({ navigation }) => {
   // Set header options
   useEffect(() => {
     navigation.setOptions({
-      headerTitle: `Notifications ${unreadCount > 0 ? `(${unreadCount})` : ''}`,
-      headerTintColor: '#007AFF',
+      headerShown: true,
+      title: `Notifications ${unreadCount > 0 ? `(${unreadCount})` : ''}`,
+      headerStyle: {
+        backgroundColor: theme.colors.primary,
+      },
+      headerTintColor: theme.colors.card,
       headerTitleStyle: {
-        fontWeight: '600',
+        fontWeight: '700',
         fontSize: 18,
+        color: theme.colors.card,
       },
       headerRight: () => (
         <TouchableOpacity
           onPress={() => handleClearAll()}
           style={{ paddingRight: 15 }}
         >
-          <Text style={{ color: '#007AFF', fontSize: 12 }}>Clear All</Text>
+          <Text style={{ color: theme.colors.card, fontSize: 12, fontWeight: '700' }}>Clear All</Text>
         </TouchableOpacity>
       ),
     });

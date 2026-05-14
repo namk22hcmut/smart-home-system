@@ -16,8 +16,10 @@ import {
   TextInput,
   ScrollView,
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { apiService } from '../services/api';
+import { theme } from '../styles/theme';
 
 export default function UserRoomsScreen({ navigation, route }) {
   const { floorId, floorName } = route.params;
@@ -35,6 +37,21 @@ export default function UserRoomsScreen({ navigation, route }) {
     room_type: 'bedroom',
     description: '',
   });
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      title: floorName || 'Rooms',
+      headerStyle: {
+        backgroundColor: theme.colors.primary,
+      },
+      headerTintColor: theme.colors.card,
+      headerTitleStyle: {
+        fontWeight: '700',
+        color: theme.colors.card,
+      },
+    });
+  }, [navigation, floorName]);
 
 
 
@@ -108,7 +125,7 @@ export default function UserRoomsScreen({ navigation, route }) {
 
   // Create new room
   const createRoom = async () => {
-    console.log('🚪 Creating room with data:', { floorId, ...formData });
+    console.log('Creating room with data:', { floorId, ...formData });
     
     // Strict validation
     if (!formData.room_name || !formData.room_name.trim()) {
@@ -162,7 +179,7 @@ export default function UserRoomsScreen({ navigation, route }) {
 
   // Delete room
   const deleteRoom = async (roomId) => {
-    console.log('🗑️ Delete button clicked for room:', roomId);
+    console.log('Delete button clicked for room:', roomId);
     
     Alert.alert(
       'Delete Room',
@@ -236,69 +253,51 @@ export default function UserRoomsScreen({ navigation, route }) {
   // Get room type display
   const getRoomTypeDisplay = (type) => {
     const types = {
-      bedroom: '🛏️ Bedroom',
-      living_room: '🛋️ Living Room',
-      kitchen: '🍳 Kitchen',
-      bathroom: '🚿 Bathroom',
-      dining_room: '🍽️ Dining Room',
-      study: '📚 Study',
-      garage: '🚗 Garage',
-      hallway: '🚪 Hallway',
-      other: '📦 Other',
+      bedroom: 'Bedroom',
+      living_room: 'Living Room',
+      kitchen: 'Kitchen',
+      bathroom: 'Bathroom',
+      dining_room: 'Dining Room',
+      study: 'Study',
+      garage: 'Garage',
+      hallway: 'Hallway',
+      other: 'Other',
     };
     return types[type] || type;
   };
 
-
-
-
-
   // Render room item with optional sensor section
   const renderRoomItem = ({ item }) => {
     const roomSensors = sensors[item.id] || [];
-    const isExpanded = selectedRoomId === item.id;
 
     return (
       <View style={styles.roomCard}>
-        <TouchableOpacity
-          style={styles.roomHeaderButton}
-          onPress={() => setSelectedRoomId(isExpanded ? null : item.id)}
-        >
-          <View style={styles.roomHeader}>
-            <View style={styles.roomInfo}>
-              <Text style={styles.roomName}>🚪 {item.name || 'Unknown'}</Text>
-              <Text style={styles.roomType}>{getRoomTypeDisplay(item.room_type || 'other')}</Text>
-            </View>
-            <View style={styles.roomActions}>
-              <TouchableOpacity
-                style={styles.editBtn}
-                onPress={() => openEditModal(item)}
-              >
-                <Text style={styles.editBtnText}>✎</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.deleteBtn}
-                onPress={() => deleteRoom(item.id)}
-              >
-                <Text style={styles.deleteBtnText}>🗑</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.expandBtn, isExpanded && styles.expandBtnActive]}
-                onPress={() => setSelectedRoomId(isExpanded ? null : item.id)}
-              >
-                <Text style={styles.expandBtnText}>{isExpanded ? '▼' : '▶'}</Text>
-              </TouchableOpacity>
-            </View>
+        <View style={styles.roomHeader}>
+          <View style={styles.roomInfo}>
+            <Text style={styles.roomName} numberOfLines={1}>{item.name || 'Unknown'}</Text>
           </View>
-        </TouchableOpacity>
 
-        {item.description ? (
-          <Text style={styles.roomDescription}>{item.description}</Text>
-        ) : null}
+          <View style={styles.roomActions}>
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => openEditModal(item)}
+              accessibilityLabel="Edit room"
+            >
+              <MaterialIcons name="edit" size={18} color={theme.colors.card} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.iconButtonDanger}
+              onPress={() => deleteRoom(item.id)}
+              accessibilityLabel="Delete room"
+            >
+              <MaterialIcons name="delete-outline" size={18} color={theme.colors.card} />
+            </TouchableOpacity>
+          </View>
+        </View>
 
         <View style={styles.roomMeta}>
-          <Text style={styles.devicesCount}>⚙️ {Number(item.devices) || 0}</Text>
-          <Text style={styles.sensorsCount}>📊 {roomSensors.length}</Text>
+          <Text style={styles.devicesCount}>Devices: {Number(item.devices) || 0}</Text>
+          <Text style={styles.sensorsCount}>Sensors: {roomSensors.length}</Text>
         </View>
 
 
@@ -306,24 +305,25 @@ export default function UserRoomsScreen({ navigation, route }) {
         {/* Navigation buttons */}
         <View style={styles.buttonRow}>
           <TouchableOpacity
-            style={[styles.navigateBtn, { flex: 1, marginRight: 4 }]}
+            style={[styles.navigateBtn, styles.navigateBtnPrimary, { flex: 1 }]}
             onPress={() => navigation.navigate('UserDevices', { roomId: item.id, roomName: item.name })}
           >
-            <Text style={styles.navigateBtnText}>👉 Devices</Text>
+            <Text style={styles.navigateBtnText}>Devices</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.navigateBtn, { flex: 1, marginHorizontal: 4, backgroundColor: '#3498db' }]}
+            style={[styles.navigateBtn, styles.navigateBtnPrimary, { flex: 1 }]}
             onPress={() => navigation.navigate('UserSensors', { roomId: item.id, roomName: item.name })}
           >
-            <Text style={styles.navigateBtnText}>📊 Sensors</Text>
+            <Text style={styles.navigateBtnText}>Sensors</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.navigateBtn, { flex: 1, marginLeft: 4, backgroundColor: '#9b59b6' }]}
+            style={[styles.navigateBtn, styles.navigateBtnPrimary, { flex: 1 }]}
             onPress={() => navigation.navigate('AutomationRules', { roomId: item.id, roomName: item.name })}
           >
-            <Text style={styles.navigateBtnText}>⚙️ Automation</Text>
+            <Text style={styles.navigateBtnText}>Automation</Text>
           </TouchableOpacity>
         </View>
+
       </View>
     );
   };
@@ -331,7 +331,7 @@ export default function UserRoomsScreen({ navigation, route }) {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#e74c3c" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={styles.loadingText}>Loading rooms...</Text>
       </View>
     );
@@ -339,45 +339,44 @@ export default function UserRoomsScreen({ navigation, route }) {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerText}>📍 {floorName}</Text>
+      <View style={styles.contentHeader}>
+        <Text style={styles.sectionTitle}>Rooms</Text>
+        <TouchableOpacity style={styles.addBtn} onPress={openAddModal} activeOpacity={0.86}>
+          <MaterialIcons name="add" size={20} color={theme.colors.card} />
+          <Text style={styles.addBtnText}>Add</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Add Room Button */}
-      <TouchableOpacity style={styles.addBtn} onPress={openAddModal}>
-        <Text style={styles.addBtnText}>+ Add Room</Text>
-      </TouchableOpacity>
-
-      {/* Rooms List */}
       <FlatList
         data={rooms}
         renderItem={renderRoomItem}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconWrap}>
+              <MaterialIcons name="meeting-room" size={34} color={theme.colors.gray2} />
+            </View>
             <Text style={styles.emptyText}>No rooms yet</Text>
-            <Text style={styles.emptySubtext}>Tap "+ Add Room" to create one</Text>
+            <Text style={styles.emptySubtext}>Add the first room for this floor</Text>
           </View>
         }
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadRooms(false)} />}
       />
 
-      {/* Add/Edit Modal */}
       <Modal visible={modalVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
-          <ScrollView style={styles.modalContent}>
+          <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalScrollContent}>
+            <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {editingRoom ? '✏️ Edit Room' : '🚪 New Room'}
+                {editingRoom ? 'Edit Room' : 'New Room'}
               </Text>
-              <TouchableOpacity onPress={resetForm}>
-                <Text style={styles.closeBtn}>✕</Text>
+              <TouchableOpacity onPress={resetForm} accessibilityLabel="Close modal">
+                <MaterialIcons name="close" size={22} color={theme.colors.gray1} />
               </TouchableOpacity>
             </View>
 
-            {/* Form */}
             <View style={styles.formContainer}>
               <Text style={styles.label}>Room Name *</Text>
               <TextInput
@@ -414,6 +413,7 @@ export default function UserRoomsScreen({ navigation, route }) {
                 <TouchableOpacity
                   style={[styles.btn, styles.saveBtn]}
                   onPress={editingRoom ? updateRoom : createRoom}
+                  activeOpacity={0.86}
                 >
                   <Text style={styles.saveBtnText}>
                     {editingRoom ? 'Update' : 'Create'}
@@ -422,6 +422,7 @@ export default function UserRoomsScreen({ navigation, route }) {
                 <TouchableOpacity
                   style={[styles.btn, styles.cancelBtn]}
                   onPress={resetForm}
+                  activeOpacity={0.86}
                 >
                   <Text style={styles.cancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
@@ -439,228 +440,212 @@ export default function UserRoomsScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.colors.background,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: theme.colors.background,
   },
   loadingText: {
-    marginTop: 10,
+    marginTop: 12,
     fontSize: 14,
-    color: '#666',
+    fontWeight: '600',
+    color: theme.colors.gray1,
   },
-  header: {
-    backgroundColor: '#9b59b6',
-    padding: 15,
+  contentHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
-  headerText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+  sectionTitle: {
+    color: theme.colors.primary,
+    fontSize: 22,
+    fontWeight: '700',
   },
   addBtn: {
-    backgroundColor: '#27ae60',
-    margin: 15,
-    padding: 15,
-    borderRadius: 8,
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
   },
   addBtnText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: theme.colors.card,
+    fontSize: 14,
+    fontWeight: '700',
   },
   listContent: {
-    paddingHorizontal: 15,
+    paddingHorizontal: 16,
     paddingBottom: 20,
   },
   roomCard: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#9b59b6',
+    backgroundColor: theme.colors.card,
+    borderRadius: 22,
+    marginBottom: 14,
+    padding: 18,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
     elevation: 2,
     overflow: 'hidden',
   },
-  roomHeaderButton: {
-    padding: 15,
-  },
   roomHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 10,
   },
   roomInfo: {
     flex: 1,
   },
   roomName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  roomType: {
-    fontSize: 13,
-    color: '#999',
-    marginTop: 2,
+    fontSize: 20,
+    fontWeight: '700',
+    color: theme.colors.primary,
   },
   roomActions: {
     flexDirection: 'row',
     gap: 8,
+    marginLeft: 10,
   },
-  editBtn: {
-    backgroundColor: '#3498db',
-    padding: 8,
-    borderRadius: 4,
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  editBtnText: {
-    color: 'white',
-    fontSize: 16,
-  },
-  deleteBtn: {
-    backgroundColor: '#e74c3c',
-    padding: 8,
-    borderRadius: 4,
-  },
-  deleteBtnText: {
-    color: 'white',
-    fontSize: 16,
+  iconButtonDanger: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: theme.colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   expandBtn: {
-    backgroundColor: '#95a5a6',
-    padding: 8,
-    borderRadius: 4,
-    width: 32,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: theme.colors.gray2,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   expandBtnActive: {
-    backgroundColor: '#e67e22',
-  },
-  expandBtnText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  roomDescription: {
-    fontSize: 14,
-    color: '#666',
-    paddingHorizontal: 15,
-    marginBottom: 8,
+    backgroundColor: theme.colors.accent,
   },
   roomMeta: {
     flexDirection: 'row',
-    gap: 15,
-    paddingHorizontal: 15,
+    gap: 12,
     marginBottom: 12,
+    flexWrap: 'wrap',
   },
-  devicesCount: {
-    fontSize: 12,
-    color: '#666',
+  metaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: theme.colors.background,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  metaText: {
+    fontSize: 14,
     fontWeight: '600',
+    color: theme.colors.gray1,
   },
-  sensorsCount: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '600',
-  },
-
-  // Sensors section
-  sensorsSection: {
-    backgroundColor: '#f9f9f9',
-    paddingHorizontal: 15,
-    paddingVertical: 12,
+  expandedSection: {
+    paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: theme.colors.background,
   },
-  sectionTitle: {
+  expandedTitle: {
     fontSize: 13,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '700',
+    color: theme.colors.primary,
     marginBottom: 10,
   },
-  sensorsList: {
-    marginTop: 0,
+  floorFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
   },
-  sensorCard: {
-    backgroundColor: 'white',
-    borderRadius: 6,
-    padding: 10,
-    marginBottom: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#3498db',
-  },
-  sensorInfo: {
-    marginLeft: 5,
-    flex: 1,
-  },
-  sensorName: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: 6,
-  },
-  sensorNameDisplay: {
+  roomsCount: {
     fontSize: 12,
-    color: '#555',
-    marginBottom: 4,
-    fontWeight: '500',
-  },
-  sensorValueDisplay: {
-    fontSize: 13,
-    color: '#27ae60',
-    marginBottom: 2,
+    color: theme.colors.gray1,
     fontWeight: '600',
   },
-  sensorNoValue: {
-    fontSize: 11,
-    color: '#bdc3c7',
-    fontStyle: 'italic',
-  },
-  noSensorsText: {
-    fontSize: 12,
-    color: '#999',
-    fontStyle: 'italic',
-    marginLeft: 5,
-  },
-
-  // Button row for side-by-side buttons
-  buttonRow: {
+  openHint: {
     flexDirection: 'row',
-    marginHorizontal: 15,
-    marginTop: 0,
-    marginBottom: 15,
-    gap: 0,
-  },
-
-  // Navigation button
-  navigateBtn: {
-    backgroundColor: '#e67e22',
-    padding: 12,
-    borderRadius: 6,
     alignItems: 'center',
+    gap: 2,
   },
-  navigateBtnText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: 'bold',
+  openHintText: {
+    fontSize: 12,
+    color: theme.colors.gray1,
+    fontWeight: '600',
   },
-
   emptyContainer: {
     alignItems: 'center',
     paddingTop: 60,
   },
+  emptyIconWrap: {
+    width: 74,
+    height: 74,
+    borderRadius: 999,
+    backgroundColor: theme.colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 1,
+  },
   emptyText: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#666',
+    fontWeight: '700',
+    color: theme.colors.primary,
+    marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#999',
-    marginTop: 8,
+    fontWeight: '600',
+    color: theme.colors.gray1,
+  },
+
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 6,
+    flexWrap: 'nowrap',
+  },
+  navigateBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navigateBtnPrimary: {
+    backgroundColor: theme.colors.primary,
+  },
+  navigateBtnText: {
+    color: theme.colors.card,
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
+    flexShrink: 1,
   },
 
   // Modal styles
@@ -670,11 +655,23 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
+    backgroundColor: theme.colors.card,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 20,
+    paddingTop: 10,
     maxHeight: '80%',
+  },
+  modalScrollContent: {
+    paddingBottom: 28,
+  },
+  modalHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: theme.colors.gray2,
+    alignSelf: 'center',
+    marginBottom: 16,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -684,39 +681,39 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '700',
+    color: theme.colors.primary,
   },
   closeBtn: {
-    fontSize: 24,
-    color: '#999',
+    fontSize: 16,
+    color: theme.colors.gray2,
   },
   formContainer: {
     marginBottom: 30,
   },
   label: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '700',
+    color: theme.colors.primary,
     marginBottom: 6,
     marginTop: 12,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
+    borderColor: theme.colors.gray2,
+    borderRadius: 14,
     padding: 12,
     fontSize: 14,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: theme.colors.background,
   },
   descriptionInput: {
     textAlignVertical: 'top',
   },
   pickerContainer: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
-    backgroundColor: '#f9f9f9',
+    borderColor: theme.colors.gray2,
+    borderRadius: 14,
+    backgroundColor: theme.colors.background,
     overflow: 'hidden',
   },
   picker: {
@@ -730,24 +727,24 @@ const styles = StyleSheet.create({
   btn: {
     flex: 1,
     padding: 14,
-    borderRadius: 6,
+    borderRadius: 14,
     alignItems: 'center',
   },
   saveBtn: {
-    backgroundColor: '#27ae60',
+    backgroundColor: theme.colors.primary,
   },
   saveBtnText: {
-    color: 'white',
+    color: theme.colors.card,
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   cancelBtn: {
-    backgroundColor: '#ecf0f1',
+    backgroundColor: theme.colors.background,
   },
   cancelBtnText: {
-    color: '#333',
+    color: theme.colors.primary,
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
 
   // Sensor specific styles
@@ -758,13 +755,13 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   addSensorBtn: {
-    backgroundColor: '#2ecc71',
+    backgroundColor: theme.colors.accent,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 4,
   },
   addSensorBtnText: {
-    color: 'white',
+    color: theme.colors.card,
     fontSize: 12,
     fontWeight: 'bold',
   },
@@ -779,21 +776,21 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   sensorEditBtn: {
-    backgroundColor: '#3498db',
+    backgroundColor: theme.colors.primary,
     padding: 6,
     borderRadius: 3,
   },
   sensorEditBtnText: {
-    color: 'white',
+    color: theme.colors.card,
     fontSize: 12,
   },
   sensorDeleteBtn: {
-    backgroundColor: '#e74c3c',
+    backgroundColor: theme.colors.accent,
     padding: 6,
     borderRadius: 3,
   },
   sensorDeleteBtnText: {
-    color: 'white',
+    color: theme.colors.card,
     fontSize: 12,
   },
 });

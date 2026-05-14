@@ -1,9 +1,9 @@
 /**
- * UserDevicesScreen.js - User Device Management
- * Allow users to create, edit, delete devices in their room
- * Integrated with Adafruit IO for real-time device control
+ * UserDevicesScreen.js - User Device Management & Control
+ * Allow users to create, edit, delete devices + control (on/off + level slider) + schedules
  */
 import React, { useState, useEffect, useRef } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -16,17 +16,17 @@ import {
   Modal,
   TextInput,
   ScrollView,
-  Switch,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import { MaterialIcons } from '@expo/vector-icons';
 import { apiService } from '../services/api';
-import adafruitService from '../services/adafruit';
+import { theme } from '../styles/theme';
 import CustomSlider from '../components/CustomSlider';
 
 export default function UserDevicesScreen({ navigation, route }) {
   const { roomId, roomName } = route.params;
   const isMounted = useRef(true);
-  
+
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -35,80 +35,70 @@ export default function UserDevicesScreen({ navigation, route }) {
   const [formData, setFormData] = useState({
     device_name: '',
     device_type: 'light',
-    status: 'off',
-    level: '0',
   });
   
-  // Adafruit Integration
-  const [adafruitMappings, setAdafruitMappings] = useState({});
-  const [adafruitData, setAdafruitData] = useState({});
-  const [loadingAdafruit, setLoadingAdafruit] = useState(false);
+  const [controllingDeviceId, setControllingDeviceId] = useState(null);
+  const [deviceLevels, setDeviceLevels] = useState({}); // Track device levels locally
 
-  // Cleanup on unmount
+  const deviceTypes = ['light', 'fan', 'ac', 'heater', 'thermostat', 'door_lock', 'camera', 'switch', 'plug', 'other'];
+
+  const getDeviceId = (device) => device?.device_id ?? device?.id;
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      title: 'Devices',
+      headerStyle: {
+        backgroundColor: theme.colors.primary,
+      },
+      headerTintColor: theme.colors.card,
+      headerTitleStyle: {
+        fontWeight: '700',
+        color: theme.colors.card,
+      },
+    });
+  }, [navigation]);
+
   useEffect(() => {
     return () => {
       isMounted.current = false;
     };
   }, []);
 
-  // 📌 REMOVED: Auto-fetch Adafruit data on mount
-  // Now: Only fetch on-demand (user refresh or control action)
+  useEffect(() => {
+    loadDevices();
+  }, []);
 
-  // Fetch Adafruit feed data for all devices (ON-DEMAND ONLY)
-  // Called when:
-  //   1. User refreshes devices list (pull-down)
-  //   2. User controls device (toggle/slider)
-  // Never called automatically!
-  const fetchAdafruitData = async () => {
-    setLoadingAdafruit(true);
-    try {
-      // Fetch fan data from Adafruit
-      const fanData = await adafruitService.getFanData();
-      
-      if (fanData.success) {
-        setAdafruitData({
-          fan: fanData.latestValue,
-          timestamp: new Date().toLocaleTimeString(),
-        });
-        console.log('✅ Loaded fan data from Adafruit');
-      }
-    } catch (error) {
-      console.error('❌ Error fetching Adafruit data:', error.message);
-    } finally {
-      setLoadingAdafruit(false);
-    }
-  };
+  // Reload devices when screen gains focus (ensure authoritative state)
+  useFocusEffect(
+    React.useCallback(() => {
+      loadDevices(false);
+    }, [])
+  );
 
-  const deviceTypes = [
-    'light',
-    'fan',
-    'ac',
-    'heater',
-    'door_lock',
-    'security_camera',
-    'plug',
-    'switch',
-    'thermostat',
-    'other',
-  ];
-
-  const statusOptions = ['on', 'off'];
-
-  // Load devices
   const loadDevices = async (showLoader = true) => {
     if (showLoader) setLoading(true);
     setRefreshing(true);
     try {
       const response = await apiService.get(`/rooms/${roomId}/devices`);
       if (response && response.success) {
-        setDevices(response.data || []);
-        console.log('✅ Loaded', (response.data || []).length, 'devices');
-        
-        // Also refresh Adafruit data
-        await fetchAdafruitData();
+        const normalizedDevices = (response.data || []).map((device) => ({
+          ...device,
+          id: device.device_id ?? device.id,
+        }));
+        setDevices(normalizedDevices);
+        // Initialize device levels
+        const levels = {};
+        normalizedDevices.forEach(device => {
+          const deviceId = getDeviceId(device);
+          if (deviceId !== undefined && deviceId !== null) {
+            levels[deviceId] = device.level || 0;
+          }
+        });
+        setDeviceLevels(levels);
       }
     } catch (error) {
-      console.error('❌ Error loading devices:', error);
+      console.error('Error loading devices:', error);
       Alert.alert('Error', 'Failed to load devices');
     } finally {
       setLoading(false);
@@ -116,13 +106,9 @@ export default function UserDevicesScreen({ navigation, route }) {
     }
   };
 
-  // Create new device
   const createDevice = async () => {
-    console.log('📋 Creating device with data:', { roomId, ...formData });
-    
-    // Strict validation
-    if (!formData.device_name || !formData.device_name.trim()) {
-      Alert.alert('Error', '❌ Please enter a device name');
+    if (!formData.device_name.trim()) {
+      Alert.alert('Error', 'Please enter a device name');
       return;
     }
 
@@ -131,23 +117,19 @@ export default function UserDevicesScreen({ navigation, route }) {
         room_id: roomId,
         device_name: formData.device_name.trim(),
         device_type: formData.device_type,
-        status: formData.status,
-        level: parseInt(formData.level) || 0,
       });
 
-      console.log('✅ Device created:', response);
       if (response && response.success) {
         Alert.alert('Success', 'Device created successfully!');
         resetForm();
         loadDevices(false);
       }
     } catch (error) {
-      console.error('❌ Create device error:', error.response?.data || error.message);
+      console.error('Create device error:', error.response?.data || error.message);
       Alert.alert('Error', error.response?.data?.error || error.message || 'Failed to create device');
     }
   };
 
-  // Update device
   const updateDevice = async () => {
     if (!formData.device_name.trim()) {
       Alert.alert('Error', 'Please enter device name');
@@ -158,8 +140,6 @@ export default function UserDevicesScreen({ navigation, route }) {
       const response = await apiService.put(`/devices/${editingDevice.id}`, {
         device_name: formData.device_name,
         device_type: formData.device_type,
-        status: formData.status,
-        level: parseInt(formData.level) || 0,
       });
 
       if (response && response.success) {
@@ -172,247 +152,208 @@ export default function UserDevicesScreen({ navigation, route }) {
     }
   };
 
-  // Delete device
-  const deleteDevice = async (deviceId) => {
-    console.log('🗑️ Delete button clicked for device:', deviceId);
-    
+  const deleteDevice = (deviceId) => {
     Alert.alert(
-      'Delete Device',
-      'Delete this device? This action cannot be undone.',
+      'Delete Device?',
+      'This action cannot be undone.',
       [
-        {
-          text: 'Cancel',
-          onPress: () => {
-            console.log('❌ Delete cancelled');
-          },
-          style: 'cancel',
-        },
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
+          style: 'destructive',
           onPress: async () => {
             try {
-              console.log('📤 Sending DELETE request to /api/devices/' + deviceId);
               const response = await apiService.delete(`/devices/${deviceId}`);
-              console.log('✅ Delete response:', response);
-              
               if (response && response.success) {
-                console.log('✅ Device deleted successfully!');
                 Alert.alert('Success', 'Device deleted!');
-                await loadDevices(false);
-              } else {
-                Alert.alert('Error', response?.error || 'Failed to delete');
+                loadDevices(false);
               }
             } catch (error) {
-              console.error('❌ Delete error:', error);
-              const errorMsg = error.response?.data?.error || error.message || 'Failed to delete device';
-              console.error('Error details:', errorMsg);
-              Alert.alert('Error', errorMsg);
+              Alert.alert('Error', error.message || 'Failed to delete');
             }
           },
-          style: 'destructive',
         },
       ]
     );
   };
 
-  // Toggle device status
+  // Toggle device on/off
   const toggleDeviceStatus = async (device) => {
-    const itemId = device.id || device.device_id;
-    const newStatus = device.status === 'on' ? 'off' : 'on';
-    
+    const deviceId = getDeviceId(device);
+    if (deviceId === undefined || deviceId === null) {
+      Alert.alert('Error', 'Invalid device id');
+      return;
+    }
+
     try {
-      console.log(`🔄 Toggling device ${itemId} to ${newStatus}`);
-      const response = await apiService.put(`/devices/${itemId}`, {
-        device_name: device.device_name || device.name,
-        device_type: device.device_type || device.type,
+      const newStatus = device.status === 'on' ? 'off' : 'on';
+      const response = await apiService.post('/device-status', {
+        device_id: deviceId,
         status: newStatus,
-        level: device.level || 0,
+        level: deviceLevels[deviceId] || 0,
       });
 
       if (response && response.success) {
-        console.log(`✅ Device ${itemId} toggled to ${newStatus}`);
-        Alert.alert('Success', `Device turned ${newStatus}`);
-        loadDevices(false);
-      } else {
-        Alert.alert('Error', response?.error || 'Failed to toggle device');
+        console.log('Device toggle response:', response);
+        // Refresh devices from server to ensure authoritative state
+        await loadDevices(false);
       }
     } catch (error) {
-      console.error(`❌ Error toggling device: ${error.message}`);
-      Alert.alert('Error', 'Failed to toggle device: ' + (error.message || 'Unknown error'));
+      console.error('Error toggling device:', error);
+      Alert.alert('Error', 'Failed to control device');
     }
   };
 
-  // Update device level (for dimmers, fans, etc.)
-  const updateDeviceLevel = async (device, newLevel) => {
-    const itemId = device.id || device.device_id;
-    
+  // Set device level
+  const setDeviceLevel = async (device, level) => {
+    const deviceId = getDeviceId(device);
+    if (deviceId === undefined || deviceId === null) {
+      Alert.alert('Error', 'Invalid device id');
+      return;
+    }
+
     try {
-      console.log(`🔆 Updating device ${itemId} level to ${newLevel}%`);
-      const response = await apiService.put(`/devices/${itemId}`, {
-        device_name: device.device_name || device.name,
-        device_type: device.device_type || device.type,
-        status: newLevel > 0 ? 'on' : 'off',
-        level: newLevel,
+      setDeviceLevels(prev => ({ ...prev, [deviceId]: level }));
+      
+      const response = await apiService.post('/device-status', {
+        device_id: deviceId,
+        status: device.status,
+        level: Math.round(level),
       });
 
       if (response && response.success) {
-        console.log(`✅ Device ${itemId} level updated to ${newLevel}%`);
-        loadDevices(false);
-      } else {
-        Alert.alert('Error', response?.error || 'Failed to update device level');
+        console.log('Device level set to', level);
       }
     } catch (error) {
-      console.error(`❌ Error updating device level: ${error.message}`);
-      Alert.alert('Error', 'Failed to update device level');
+      console.error('Error setting device level:', error);
     }
   };
 
-  // Open add device modal
   const openAddModal = () => {
     setEditingDevice(null);
-    setFormData({ device_name: '', device_type: 'light', status: 'off', level: '0' });
+    setFormData({ device_name: '', device_type: 'light' });
     setModalVisible(true);
   };
 
-  // Open edit device modal
-  const openEditModal = (device) => {
+  const handleEditDevice = (device) => {
     setEditingDevice(device);
     setFormData({
-      device_name: device.name,
-      device_type: device.type,
-      status: device.status,
-      level: device.level.toString(),
+      device_name: device.device_name || '',
+      device_type: device.device_type || 'light',
     });
     setModalVisible(true);
   };
 
-  // Reset form
+  const handleSaveDevice = () => {
+    if (editingDevice) {
+      updateDevice();
+    } else {
+      createDevice();
+    }
+  };
+
   const resetForm = () => {
-    setFormData({ device_name: '', device_type: 'light', status: 'off', level: '0' });
+    setFormData({ device_name: '', device_type: 'light' });
     setEditingDevice(null);
     setModalVisible(false);
   };
 
-  // Initial load
-  useEffect(() => {
-    loadDevices();
-  }, []);
-
-  // Get device type display
-  const getDeviceTypeDisplay = (type) => {
-    const types = {
-      light: '💡 Light',
-      fan: '🌀 Fan',
-      ac: '❄️ Air Conditioner',
-      heater: '🔥 Heater',
-      door_lock: '🔒 Door Lock',
-      security_camera: '📹 Camera',
-      plug: '🔌 Smart Plug',
-      switch: '🔘 Switch',
-      thermostat: '🌡️ Thermostat',
-      other: '⚙️ Other',
-    };
-    return types[type] || type;
-  };
-
-  // Get status color
-  const getStatusColor = (status) => {
-    return status === 'on' ? '#27ae60' : '#95a5a6';
-  };
-
-  // Render device item
-  const renderDeviceItem = ({ item }) => {
-    // Debug: log item structure
-    const itemId = item.id || item.device_id;
-    if (!itemId) {
-      console.warn('⚠️ Device item missing id:', item);
-      return null;
-    }
-
-    // Normalize item properties
-    const deviceStatus = String(item.status || 'off').toLowerCase();
-    const deviceLevel = Number(item.level) || 0;
-    
-    // Get Adafruit data for this device
-    const adafruitInfo = adafruitData[itemId] || null;
-    const lastValue = adafruitInfo?.latest?.value;
-    const lastTimestamp = adafruitInfo?.latest?.created_at;
-
-    return (
+  const renderDeviceItem = ({ item }) => (
     <View style={styles.deviceCard}>
       <View style={styles.deviceHeader}>
         <View style={styles.deviceInfo}>
-          <Text style={styles.deviceName}>⚙️ {String(item.name || item.device_name || 'Unknown')}</Text>
-          <Text style={styles.deviceType}>{getDeviceTypeDisplay(String(item.type || item.device_type || 'other'))}</Text>
-          {adafruitInfo && (
-            <Text style={styles.adafruitStatus}>
-              📡 Adafruit: {lastValue !== null ? lastValue : 'No data'}
-              {lastTimestamp && <Text style={styles.timestamp}>  ({new Date(lastTimestamp).toLocaleTimeString()})</Text>}
-            </Text>
-          )}
+          <Text style={styles.deviceName} numberOfLines={1}>{item.device_name || 'Unnamed Device'}</Text>
+          <Text style={styles.deviceType}>{item.device_type || 'device'}</Text>
         </View>
+
         <View style={styles.deviceActions}>
           <TouchableOpacity
-            style={[styles.statusBtn, { backgroundColor: getStatusColor(deviceStatus) }]}
-            onPress={() => toggleDeviceStatus(item)}
+            style={styles.iconButton}
+            onPress={() => handleEditDevice(item)}
+            accessibilityLabel="Edit device"
           >
-            <Text style={styles.statusBtnText}>{deviceStatus.toUpperCase()}</Text>
+            <MaterialIcons name="edit" size={18} color={theme.colors.gray1} />
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.scheduleBtn}
-            onPress={() => navigation.navigate('DeviceScheduling', { device: { ...item, id: itemId } })}
-            title="Schedule"
+            style={styles.iconButton}
+            onPress={() => deleteDevice(item.id)}
+            accessibilityLabel="Delete device"
           >
-            <Text style={styles.scheduleBtnText}>⏰</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.logsBtn}
-            onPress={() => navigation.navigate('DeviceActivityLogs', { device: { ...item, id: itemId } })}
-            title="Logs"
-          >
-            <Text style={styles.logsBtnText}>📋</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.editBtn}
-            onPress={() => openEditModal({ ...item, id: itemId })}
-          >
-            <Text style={styles.editBtnText}>✎</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.deleteBtn}
-            onPress={() => deleteDevice(itemId)}
-          >
-            <Text style={styles.deleteBtnText}>🗑</Text>
+            <MaterialIcons name="delete-outline" size={18} color={theme.colors.gray1} />
           </TouchableOpacity>
         </View>
       </View>
-      
-      {item.device_type !== 'door_lock' && item.device_type !== 'switch' && item.type !== 'door_lock' && item.type !== 'switch' && (
-        <View style={styles.levelContainer}>
-          <View style={styles.levelHeader}>
-            <Text style={styles.levelLabel}>💡 Brightness</Text>
-            <Text style={styles.levelValue}>{deviceLevel}%</Text>
-          </View>
+
+
+
+      <View style={styles.controlSection}>
+        <View style={styles.statusRow}>
+          <Text style={styles.controlLabel}>Status</Text>
+          <TouchableOpacity
+            style={[
+              styles.statusToggle,
+              { backgroundColor: item.status === 'on' ? theme.colors.accent : theme.colors.gray2 }
+            ]}
+            onPress={() => toggleDeviceStatus(item)}
+          >
+            <Text style={styles.statusToggleText}>
+              {item.status === 'on' ? 'ON' : 'OFF'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.levelRow}>
+          <Text style={styles.controlLabel}>Level: {Math.round(deviceLevels[getDeviceId(item)] || 0)}%</Text>
           <CustomSlider
+            style={styles.slider}
             min={0}
             max={100}
-            value={deviceLevel}
-            onChange={(newLevel) => {
-              console.log(`🔄 Slider moved to ${newLevel}%`);
-              updateDeviceLevel(item, newLevel);
-            }}
-            style={styles.slider}
+            value={deviceLevels[getDeviceId(item)] || 0}
+            onChange={(value) => setDeviceLevel(item, value)}
           />
         </View>
-      )}
+
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.scheduleBtn, styles.actionBtn]}
+            onPress={() => {
+              if (navigation.navigate) {
+                navigation.navigate('DeviceScheduling', {
+                  device: item,
+                  deviceId: getDeviceId(item),
+                  deviceName: item.device_name,
+                });
+              }
+            }}
+            activeOpacity={0.86}
+          >
+            <MaterialIcons name="schedule" size={16} color={theme.colors.card} />
+            <Text style={styles.scheduleBtnText}>Schedule</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.logsBtn, styles.actionBtn]}
+            onPress={() => {
+              if (navigation.navigate) {
+                navigation.navigate('DeviceActivityLogs', {
+                  device: item,
+                });
+              }
+            }}
+            activeOpacity={0.86}
+          >
+            <MaterialIcons name="history" size={16} color={theme.colors.card} />
+            <Text style={styles.scheduleBtnText}>Activity Log</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     </View>
-    );
-  };
+  );
 
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#e74c3c" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={styles.loadingText}>Loading devices...</Text>
       </View>
     );
@@ -420,104 +361,77 @@ export default function UserDevicesScreen({ navigation, route }) {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerText}>🚪 {roomName}</Text>
+      <View style={styles.contentHeader}>
+        <Text style={styles.sectionTitle} numberOfLines={1}>{roomName}</Text>
+        <TouchableOpacity style={styles.addBtn} onPress={openAddModal} activeOpacity={0.86}>
+          <MaterialIcons name="add" size={20} color={theme.colors.card} />
+          <Text style={styles.addBtnText}>Add</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Add Device Button */}
-      <TouchableOpacity style={styles.addBtn} onPress={openAddModal}>
-        <Text style={styles.addBtnText}>+ Add Device</Text>
-      </TouchableOpacity>
-
-      {/* Devices List */}
       <FlatList
         data={devices}
         renderItem={renderDeviceItem}
-        keyExtractor={(item, index) => String(item.id || item._id || index)}
+        keyExtractor={(item, index) => {
+          const deviceId = getDeviceId(item);
+          return deviceId !== undefined && deviceId !== null ? deviceId.toString() : index.toString();
+        }}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconWrap}>
+              <MaterialIcons name="storage" size={34} color={theme.colors.gray2} />
+            </View>
             <Text style={styles.emptyText}>No devices yet</Text>
-            <Text style={styles.emptySubtext}>Tap "+ Add Device" to create one</Text>
+            <Text style={styles.emptySubtext}>Add the first device for this room</Text>
           </View>
         }
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadDevices(false)} />}
       />
 
-      {/* Add/Edit Modal */}
       <Modal visible={modalVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
-          <ScrollView style={styles.modalContent}>
+          <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalScrollContent}>
+            <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {editingDevice ? '✏️ Edit Device' : '⚙️ New Device'}
+                {editingDevice ? 'Edit device' : 'New device'}
               </Text>
-              <TouchableOpacity onPress={resetForm}>
-                <Text style={styles.closeBtn}>✕</Text>
+              <TouchableOpacity style={styles.closeBtn} onPress={resetForm} accessibilityLabel="Close modal">
+                <MaterialIcons name="close" size={22} color={theme.colors.gray1} />
               </TouchableOpacity>
             </View>
 
-            {/* Form */}
             <View style={styles.formContainer}>
               <Text style={styles.label}>Device Name *</Text>
               <TextInput
                 style={styles.input}
-                placeholder="e.g., Main Light, Ceiling Fan"
+                placeholder="e.g., Living Room Light"
+                placeholderTextColor={theme.colors.gray2}
                 value={formData.device_name}
                 onChangeText={(text) => setFormData({ ...formData, device_name: text })}
               />
 
-              <Text style={styles.label}>Device Type</Text>
+              <Text style={styles.label}>Device Type *</Text>
               <View style={styles.pickerContainer}>
                 <Picker
                   selectedValue={formData.device_type}
-                  onValueChange={(value) => setFormData({ ...formData, device_type: value })}
+                  onValueChange={(itemValue) => setFormData({ ...formData, device_type: itemValue })}
                   style={styles.picker}
                 >
                   {deviceTypes.map((type) => (
-                    <Picker.Item key={type} label={getDeviceTypeDisplay(type)} value={type} />
+                    <Picker.Item key={type} label={type} value={type} />
                   ))}
                 </Picker>
               </View>
 
-              <Text style={styles.label}>Initial Status</Text>
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={formData.status}
-                  onValueChange={(value) => setFormData({ ...formData, status: value })}
-                  style={styles.picker}
-                >
-                  {statusOptions.map((status) => (
-                    <Picker.Item
-                      key={status}
-                      label={status.toUpperCase()}
-                      value={status}
-                    />
-                  ))}
-                </Picker>
-              </View>
 
-              <Text style={styles.label}>Initial Level (0-100)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="0"
-                value={formData.level}
-                onChangeText={(text) => {
-                  const num = parseInt(text) || 0;
-                  const level = Math.max(0, Math.min(100, num));
-                  setFormData({ ...formData, level: level.toString() });
-                }}
-                keyboardType="numeric"
-              />
 
-              <Text style={styles.hint}>💡 Tip: Level is used for dimmable lights, fans speed, etc.</Text>
-
-              {/* Buttons */}
               <View style={styles.buttonGroup}>
                 <TouchableOpacity
                   style={[styles.btn, styles.saveBtn]}
-                  onPress={editingDevice ? updateDevice : createDevice}
+                  onPress={handleSaveDevice}
+                  activeOpacity={0.86}
                 >
                   <Text style={styles.saveBtnText}>
                     {editingDevice ? 'Update' : 'Create'}
@@ -526,6 +440,7 @@ export default function UserDevicesScreen({ navigation, route }) {
                 <TouchableOpacity
                   style={[styles.btn, styles.cancelBtn]}
                   onPress={resetForm}
+                  activeOpacity={0.86}
                 >
                   <Text style={styles.cancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
@@ -541,271 +456,293 @@ export default function UserDevicesScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.colors.background,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: theme.colors.background,
   },
   loadingText: {
-    marginTop: 10,
+    marginTop: 12,
     fontSize: 14,
-    color: '#666',
+    fontWeight: '600',
+    color: theme.colors.gray1,
   },
-  header: {
-    backgroundColor: '#f39c12',
-    padding: 15,
+  contentHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
-  headerText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+  sectionTitle: {
+    color: theme.colors.primary,
+    fontSize: 22,
+    fontWeight: '700',
+    flex: 1,
+    minWidth: 0,
+    marginRight: 12,
   },
   addBtn: {
-    backgroundColor: '#27ae60',
-    margin: 15,
-    padding: 15,
-    borderRadius: 8,
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
   },
   addBtnText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: theme.colors.card,
+    fontSize: 14,
+    fontWeight: '700',
   },
   listContent: {
-    paddingHorizontal: 15,
+    paddingHorizontal: 16,
     paddingBottom: 20,
   },
   deviceCard: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    padding: 15,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#f39c12',
+    backgroundColor: theme.colors.card,
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 14,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
     elevation: 2,
   },
   deviceHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    justifyContent: 'space-between',
   },
   deviceInfo: {
     flex: 1,
+    minWidth: 0,
   },
   deviceName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 20,
+    fontWeight: '700',
+    color: theme.colors.primary,
   },
   deviceType: {
     fontSize: 13,
-    color: '#999',
-    marginTop: 2,
-  },
-  adafruitStatus: {
-    fontSize: 12,
-    color: '#27ae60',
+    fontWeight: '600',
+    color: theme.colors.gray2,
     marginTop: 4,
-    fontWeight: '500',
-  },
-  timestamp: {
-    fontSize: 11,
-    color: '#7f8c8d',
+    textTransform: 'capitalize',
   },
   deviceActions: {
     flexDirection: 'row',
     gap: 8,
+    marginLeft: 10,
+  },
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: theme.colors.background,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  statusBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 4,
+
+  controlSection: {
+    marginTop: 18,
+    paddingTop: 18,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.background,
   },
-  statusBtnText: {
-    color: 'white',
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-  editBtn: {
-    backgroundColor: '#3498db',
-    padding: 8,
-    borderRadius: 4,
-  },
-  editBtnText: {
-    color: 'white',
-    fontSize: 16,
-  },
-  scheduleBtn: {
-    backgroundColor: '#FF9800',
-    padding: 8,
-    borderRadius: 4,
-    marginRight: 4,
-  },
-  scheduleBtnText: {
-    color: 'white',
-    fontSize: 16,
-  },
-  logsBtn: {
-    backgroundColor: '#2196F3',
-    padding: 8,
-    borderRadius: 4,
-    marginRight: 4,
-  },
-  logsBtnText: {
-    color: 'white',
-    fontSize: 16,
-  },
-  deleteBtn: {
-    backgroundColor: '#e74c3c',
-    padding: 8,
-    borderRadius: 4,
-  },
-  deleteBtnText: {
-    color: 'white',
-    fontSize: 16,
-  },
-  levelContainer: {
-    marginTop: 15,
-    backgroundColor: '#f9f9f9',
-    padding: 12,
-    borderRadius: 6,
-  },
-  levelHeader: {
+  statusRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    justifyContent: 'space-between',
+    marginBottom: 16,
   },
-  levelLabel: {
-    fontSize: 13,
-    color: '#666',
-    fontWeight: '600',
+  controlLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.colors.primary,
   },
-  levelValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#f39c12',
+  statusToggle: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  statusToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.colors.card,
+  },
+  levelRow: {
+    marginBottom: 16,
   },
   slider: {
     marginTop: 8,
   },
-  levelBar: {
-    height: 6,
-    backgroundColor: '#ecf0f1',
-    borderRadius: 3,
-    overflow: 'hidden',
+  scheduleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 6,
   },
-  levelFill: {
-    height: '100%',
+  logsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.accent,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 6,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  actionBtn: {
+    flex: 1,
+  },
+  scheduleBtnText: {
+    color: theme.colors.card,
+    fontSize: 13,
+    fontWeight: '700',
   },
   emptyContainer: {
     alignItems: 'center',
-    paddingTop: 60,
+    marginTop: 60,
+  },
+  emptyIconWrap: {
+    width: 74,
+    height: 74,
+    borderRadius: 999,
+    backgroundColor: theme.colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 1,
   },
   emptyText: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#666',
+    fontWeight: '700',
+    color: theme.colors.primary,
+    marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#999',
-    marginTop: 8,
+    fontWeight: '600',
+    color: theme.colors.gray2,
   },
-
-  // Modal styles
   modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: '85%',
+    backgroundColor: theme.colors.card,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    maxHeight: '90%',
+  },
+  modalScrollContent: {
+    paddingBottom: 40,
+  },
+  modalHandle: {
+    width: 48,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: theme.colors.gray2,
+    alignSelf: 'center',
+    marginTop: 14,
+    marginBottom: 12,
   },
   modalHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.background,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '700',
+    color: theme.colors.primary,
+    flex: 1,
   },
   closeBtn: {
-    fontSize: 24,
-    color: '#999',
+    padding: 8,
+    marginRight: -8,
   },
   formContainer: {
-    marginBottom: 30,
+    paddingHorizontal: 20,
+    paddingTop: 20,
   },
   label: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 6,
-    marginTop: 12,
+    fontWeight: '700',
+    color: theme.colors.primary,
+    marginBottom: 8,
+    marginTop: 16,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
-    padding: 12,
+    backgroundColor: theme.colors.background,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     fontSize: 14,
-    backgroundColor: '#f9f9f9',
+    fontWeight: '500',
+    color: theme.colors.primary,
   },
   pickerContainer: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: theme.colors.background,
+    borderRadius: 12,
     overflow: 'hidden',
   },
   picker: {
-    height: 50,
-  },
-  hint: {
-    fontSize: 12,
-    color: '#3498db',
-    marginTop: 8,
-    fontStyle: 'italic',
+    color: theme.colors.primary,
   },
   buttonGroup: {
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 25,
+    gap: 12,
+    marginTop: 28,
+    marginBottom: 8,
   },
   btn: {
     flex: 1,
-    padding: 14,
-    borderRadius: 6,
+    paddingVertical: 14,
+    borderRadius: 14,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   saveBtn: {
-    backgroundColor: '#27ae60',
+    backgroundColor: theme.colors.primary,
   },
   saveBtnText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: theme.colors.card,
+    fontSize: 14,
+    fontWeight: '700',
   },
   cancelBtn: {
-    backgroundColor: '#ecf0f1',
+    backgroundColor: theme.colors.background,
+    borderWidth: 1,
+    borderColor: theme.colors.gray2,
   },
   cancelBtnText: {
-    color: '#333',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: theme.colors.primary,
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

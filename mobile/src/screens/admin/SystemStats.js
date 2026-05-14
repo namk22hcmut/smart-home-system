@@ -11,11 +11,27 @@ import {
   RefreshControl,
 } from 'react-native';
 import { apiService } from '../../services/api';
+import { theme } from '../../styles/theme';
 
 export default function SystemStats({ navigation }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      title: 'System Stats',
+      headerStyle: {
+        backgroundColor: theme.colors.primary,
+      },
+      headerTintColor: theme.colors.card,
+      headerTitleStyle: {
+        fontWeight: '700',
+        color: theme.colors.card,
+      },
+    });
+  }, [navigation]);
 
   // Load statistics
   const loadStats = async (showLoader = true) => {
@@ -43,7 +59,7 @@ export default function SystemStats({ navigation }) {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#f39c12" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={styles.loadingText}>Loading statistics...</Text>
       </View>
     );
@@ -65,23 +81,23 @@ export default function SystemStats({ navigation }) {
     >
       {/* User Analytics */}
       <Section title="👥 User Analytics" icon="👥">
-        <StatRow label="Total Users" value={stats.total_users} color="#3498db" />
-        <StatRow label="Active Users" value={stats.active_users} color="#2ecc71" />
-        <StatRow label="Inactive Users" value={stats.total_users - stats.active_users} color="#e74c3c" />
-        <StatRow label="Admin Users" value={stats.admin_users} color="#e67e22" />
+        <StatRow label="Total Users" value={stats.total_users} color={theme.colors.primary} />
+        <StatRow label="Active Users" value={stats.active_users} color={theme.colors.primary} />
+        <StatRow label="Inactive Users" value={stats.total_users - stats.active_users} color={theme.colors.accent} />
+        <StatRow label="Admin Users" value={stats.admin_users} color={theme.colors.accent} />
       </Section>
 
       {/* Device Analytics */}
       <Section title="🔌 Device & Sensor Analytics" icon="🔌">
-        <StatRow label="Total Houses" value={stats.total_houses} color="#9b59b6" />
-        <StatRow label="Total Devices" value={stats.total_devices} color="#1abc9c" />
-        <StatRow label="Total Sensors" value={stats.total_sensors} color="#16a085" />
+        <StatRow label="Total Houses" value={stats.total_houses} color={theme.colors.primary} />
+        <StatRow label="Total Devices" value={stats.total_devices} color={theme.colors.primary} />
+        <StatRow label="Total Sensors" value={stats.total_sensors} color={theme.colors.primary} />
       </Section>
 
       {/* Activity Analytics */}
       <Section title="📊 Activity Analytics" icon="📊">
-        <StatRow label="Today's Activities" value={stats.today_activity} color="#f39c12" />
-        <StatRow label="Device Level" value="0-100" color="#3498db" info="(Device Control Range)" />
+        <StatRow label="Today's Activities" value={stats.today_activity} color={theme.colors.primary} />
+        <StatRow label="Device Level" value="0-100" color={theme.colors.accent} info="(Device Control Range)" />
       </Section>
 
       {/* System Information */}
@@ -99,15 +115,15 @@ export default function SystemStats({ navigation }) {
             label="System Health"
             value="Good"
             icon="💚"
-            bgColor="#d5f4e6"
-            textColor="#27ae60"
+            bgColor={theme.colors.card}
+            textColor={theme.colors.primary}
           />
           <SummaryCard
             label="User Engagement"
             value={stats.active_users > 0 ? 'Active' : 'Inactive'}
-            icon={stats.active_users > 0 ? '🟢' : '🔴'}
-            bgColor={stats.active_users > 0 ? '#d5f4e6' : '#fadbd8'}
-            textColor={stats.active_users > 0 ? '#27ae60' : '#c0392b'}
+            icon={stats.active_users > 0 ? '●' : '•'}
+            bgColor={theme.colors.card}
+            textColor={stats.active_users > 0 ? theme.colors.primary : theme.colors.accent}
           />
         </View>
       </View>
@@ -168,7 +184,7 @@ function SummaryCard({ label, value, icon, bgColor, textColor }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ecf0f1',
+    backgroundColor: theme.colors.background,
   },
   centerContainer: {
     flex: 1,
@@ -178,14 +194,14 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#7f8c8d',
+    color: theme.colors.gray1,
   },
   emptyText: {
     fontSize: 16,
-    color: '#95a5a6',
+    color: theme.colors.gray2,
   },
   section: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.card,
     marginHorizontal: 12,
     marginVertical: 8,
     borderRadius: 8,
@@ -195,8 +211,8 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#fff',
-    backgroundColor: '#2c3e50',
+    color: theme.colors.card,
+    backgroundColor: theme.colors.primary,
     paddingVertical: 12,
     paddingHorizontal: 12,
   },
@@ -210,19 +226,19 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#ecf0f1',
+    borderBottomColor: theme.colors.gray2,
   },
   statLabelContainer: {
     flex: 1,
   },
   statLabel: {
     fontSize: 14,
-    color: '#2c3e50',
+    color: theme.colors.text,
     fontWeight: '500',
   },
   statInfo: {
     fontSize: 11,
-    color: '#95a5a6',
+    color: theme.colors.gray2,
     marginTop: 4,
   },
   statValueBadge: {
@@ -240,19 +256,19 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#ecf0f1',
+    borderBottomColor: theme.colors.gray2,
   },
   infoLabel: {
     fontSize: 14,
-    color: '#7f8c8d',
+    color: theme.colors.gray1,
   },
   infoValue: {
     fontSize: 14,
-    color: '#2c3e50',
+    color: theme.colors.text,
     fontWeight: '600',
   },
   summarySection: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.card,
     marginHorizontal: 12,
     marginVertical: 8,
     borderRadius: 8,
@@ -262,7 +278,7 @@ const styles = StyleSheet.create({
   summaryTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: theme.colors.text,
     marginBottom: 12,
   },
   summaryGrid: {
@@ -283,7 +299,7 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 12,
-    color: '#7f8c8d',
+    color: theme.colors.gray1,
     marginBottom: 4,
   },
   summaryValue: {
@@ -294,12 +310,12 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: '#bdc3c7',
+    borderTopColor: theme.colors.gray2,
     marginHorizontal: 12,
     marginVertical: 12,
   },
   footerText: {
     fontSize: 12,
-    color: '#95a5a6',
+    color: theme.colors.gray2,
   },
 });

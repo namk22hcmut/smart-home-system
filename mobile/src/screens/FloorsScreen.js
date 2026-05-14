@@ -16,7 +16,9 @@ import {
   TextInput,
   ScrollView,
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { apiService } from '../services/api';
+import { theme } from '../styles/theme';
 
 export default function UserFloorsScreen({ navigation, route }) {
   const { houseId, houseName } = route.params;
@@ -32,6 +34,21 @@ export default function UserFloorsScreen({ navigation, route }) {
     floor_number: '',
     description: '',
   });
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      title: houseName || 'Floors',
+      headerStyle: {
+        backgroundColor: theme.colors.primary,
+      },
+      headerTintColor: theme.colors.card,
+      headerTitleStyle: {
+        fontWeight: '700',
+        color: theme.colors.card,
+      },
+    });
+  }, [navigation, houseName]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -74,7 +91,7 @@ export default function UserFloorsScreen({ navigation, route }) {
     
     // Strict validation
     if (!formData.floor_name || !formData.floor_name.trim()) {
-      Alert.alert('Error', '❌ Please enter a floor name');
+      Alert.alert('Error', 'Please enter a floor name');
       return;
     }
 
@@ -182,41 +199,61 @@ export default function UserFloorsScreen({ navigation, route }) {
   const renderFloorItem = ({ item }) => (
     <TouchableOpacity
       style={styles.floorCard}
+      activeOpacity={0.86}
       onPress={() => navigation.navigate('UserRooms', { floorId: item.id, floorName: item.name })}
     >
       <View style={styles.floorHeader}>
         <View style={styles.floorInfo}>
-          <Text style={styles.floorName}>📍 {item.name}</Text>
-          {item.floor_number !== null && (
+          <Text style={styles.floorName} numberOfLines={1}>{item.name}</Text>
+          {item.floor_number !== null && item.floor_number !== undefined && (
             <Text style={styles.floorNumber}>Level {item.floor_number}</Text>
           )}
         </View>
+
         <View style={styles.floorActions}>
           <TouchableOpacity
-            style={styles.editBtn}
-            onPress={() => openEditModal(item)}
+            style={styles.iconButton}
+            onPress={(event) => {
+              event.stopPropagation();
+              openEditModal(item);
+            }}
+            accessibilityLabel="Edit floor"
           >
-            <Text style={styles.editBtnText}>✎</Text>
+            <MaterialIcons name="edit" size={18} color={theme.colors.text} />
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.deleteBtn}
-            onPress={() => deleteFloor(item.id)}
+            style={styles.iconButton}
+            onPress={(event) => {
+              event.stopPropagation();
+              deleteFloor(item.id);
+            }}
+            accessibilityLabel="Delete floor"
           >
-            <Text style={styles.deleteBtnText}>🗑</Text>
+            <MaterialIcons name="delete-outline" size={18} color={theme.colors.text} />
           </TouchableOpacity>
         </View>
       </View>
-      {item.description && (
+
+      {item.description ? (
         <Text style={styles.floorDescription}>{item.description}</Text>
-      )}
-      <Text style={styles.roomsCount}>🚪 {item.rooms} rooms</Text>
+      ) : null}
+
+      <View style={styles.floorFooter}>
+        <View style={styles.metaPill}>
+          <Text style={styles.roomsCount}>{item.rooms || 0} rooms</Text>
+        </View>
+        <View style={styles.openHint}>
+          <Text style={styles.openHintText}>Open</Text>
+          <MaterialIcons name="chevron-right" size={20} color={theme.colors.gray2} />
+        </View>
+      </View>
     </TouchableOpacity>
   );
 
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#e74c3c" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={styles.loadingText}>Loading floors...</Text>
       </View>
     );
@@ -224,15 +261,13 @@ export default function UserFloorsScreen({ navigation, route }) {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerText}>🏠 {houseName}</Text>
+      <View style={styles.contentHeader}>
+        <Text style={styles.sectionTitle}>Floors</Text>
+        <TouchableOpacity style={styles.addBtn} onPress={openAddModal} activeOpacity={0.86}>
+          <MaterialIcons name="add" size={20} color={theme.colors.card} />
+          <Text style={styles.addBtnText}>Add</Text>
+        </TouchableOpacity>
       </View>
-
-      {/* Add Floor Button */}
-      <TouchableOpacity style={styles.addBtn} onPress={openAddModal}>
-        <Text style={styles.addBtnText}>+ Add Floor</Text>
-      </TouchableOpacity>
 
       {/* Floors List */}
       <FlatList
@@ -242,8 +277,11 @@ export default function UserFloorsScreen({ navigation, route }) {
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconWrap}>
+              <MaterialIcons name="layers-clear" size={34} color={theme.colors.gray2} />
+            </View>
             <Text style={styles.emptyText}>No floors yet</Text>
-            <Text style={styles.emptySubtext}>Tap "+ Add Floor" to create one</Text>
+            <Text style={styles.emptySubtext}>Add the first floor for this house</Text>
           </View>
         }
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadFloors(false)} />}
@@ -252,13 +290,14 @@ export default function UserFloorsScreen({ navigation, route }) {
       {/* Add/Edit Modal */}
       <Modal visible={modalVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
-          <ScrollView style={styles.modalContent}>
+          <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalScrollContent}>
+            <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {editingFloor ? '✏️ Edit Floor' : '📍 New Floor'}
+                {editingFloor ? 'Edit floor' : 'New floor'}
               </Text>
-              <TouchableOpacity onPress={resetForm}>
-                <Text style={styles.closeBtn}>✕</Text>
+              <TouchableOpacity style={styles.closeBtn} onPress={resetForm} accessibilityLabel="Close modal">
+                <MaterialIcons name="close" size={22} color={theme.colors.gray1} />
               </TouchableOpacity>
             </View>
 
@@ -268,6 +307,7 @@ export default function UserFloorsScreen({ navigation, route }) {
               <TextInput
                 style={styles.input}
                 placeholder="e.g., Ground Floor, 1st Floor"
+                placeholderTextColor={theme.colors.gray2}
                 value={formData.floor_name}
                 onChangeText={(text) => setFormData({ ...formData, floor_name: text })}
               />
@@ -276,6 +316,7 @@ export default function UserFloorsScreen({ navigation, route }) {
               <TextInput
                 style={styles.input}
                 placeholder="e.g., 0, 1, 2"
+                placeholderTextColor={theme.colors.gray2}
                 value={formData.floor_number}
                 onChangeText={(text) => setFormData({ ...formData, floor_number: text })}
                 keyboardType="numeric"
@@ -285,6 +326,7 @@ export default function UserFloorsScreen({ navigation, route }) {
               <TextInput
                 style={[styles.input, styles.descriptionInput]}
                 placeholder="Optional description"
+                placeholderTextColor={theme.colors.gray2}
                 value={formData.description}
                 onChangeText={(text) => setFormData({ ...formData, description: text })}
                 multiline={true}
@@ -318,192 +360,254 @@ export default function UserFloorsScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.colors.background,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: theme.colors.background,
   },
   loadingText: {
-    marginTop: 10,
+    marginTop: 12,
     fontSize: 14,
-    color: '#666',
+    fontWeight: '600',
+    color: theme.colors.gray1,
   },
-  header: {
-    backgroundColor: '#e74c3c',
-    padding: 15,
+  contentHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
-  headerText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+  sectionTitle: {
+    color: theme.colors.primary,
+    fontSize: 22,
+    fontWeight: '700',
   },
   addBtn: {
-    backgroundColor: '#27ae60',
-    margin: 15,
-    padding: 15,
-    borderRadius: 8,
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
   },
   addBtnText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: theme.colors.card,
+    fontSize: 14,
+    fontWeight: '700',
   },
   listContent: {
-    paddingHorizontal: 15,
+    paddingHorizontal: 16,
     paddingBottom: 20,
   },
   floorCard: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    padding: 15,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#3498db',
+    backgroundColor: theme.colors.card,
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 14,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
     elevation: 2,
   },
   floorHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
   },
   floorInfo: {
     flex: 1,
+    minWidth: 0,
   },
   floorName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 20,
+    fontWeight: '700',
+    color: theme.colors.primary,
   },
   floorNumber: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 2,
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.colors.gray2,
+    marginTop: 4,
   },
   floorActions: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
+    marginLeft: 10,
   },
-  editBtn: {
-    backgroundColor: '#3498db',
-    padding: 8,
-    borderRadius: 4,
-  },
-  editBtnText: {
-    color: 'white',
-    fontSize: 16,
-  },
-  deleteBtn: {
-    backgroundColor: '#e74c3c',
-    padding: 8,
-    borderRadius: 4,
-  },
-  deleteBtnText: {
-    color: 'white',
-    fontSize: 16,
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: theme.colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   floorDescription: {
     fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
+    lineHeight: 20,
+    color: theme.colors.gray1,
+    marginTop: 14,
+  },
+  floorFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 18,
+  },
+  metaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.background,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    gap: 6,
   },
   roomsCount: {
     fontSize: 12,
-    color: '#999',
+    fontWeight: '700',
+    color: theme.colors.gray1,
+  },
+  openHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  openHintText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.colors.gray2,
   },
   emptyContainer: {
     alignItems: 'center',
-    paddingTop: 60,
+    paddingTop: 64,
+    paddingHorizontal: 24,
+  },
+  emptyIconWrap: {
+    width: 68,
+    height: 68,
+    borderRadius: 22,
+    backgroundColor: theme.colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    elevation: 1,
   },
   emptyText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#666',
+    fontSize: 22,
+    fontWeight: '700',
+    color: theme.colors.primary,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#999',
+    fontWeight: '600',
+    color: theme.colors.gray2,
     marginTop: 8,
+    textAlign: 'center',
   },
 
   // Modal styles
   modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(17, 24, 39, 0.58)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: '80%',
+    backgroundColor: theme.colors.card,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 22,
+    maxHeight: '82%',
+  },
+  modalScrollContent: {
+    paddingTop: 12,
+    paddingBottom: 28,
+  },
+  modalHandle: {
+    width: 42,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: '#d1d5db',
+    alignSelf: 'center',
+    marginBottom: 18,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 24,
+    fontWeight: '700',
+    color: theme.colors.primary,
   },
   closeBtn: {
-    fontSize: 24,
-    color: '#999',
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    backgroundColor: theme.colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   formContainer: {
-    marginBottom: 30,
+    marginBottom: 6,
   },
   label: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 6,
-    marginTop: 12,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1f2937',
+    marginBottom: 8,
+    marginTop: 14,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
-    padding: 12,
-    fontSize: 14,
-    backgroundColor: '#f9f9f9',
+    borderWidth: 0,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.colors.primary,
+    backgroundColor: theme.colors.background,
   },
   descriptionInput: {
+    minHeight: 104,
     textAlignVertical: 'top',
   },
   buttonGroup: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 25,
+    marginTop: 26,
   },
   btn: {
     flex: 1,
-    padding: 14,
-    borderRadius: 6,
+    paddingVertical: 15,
+    borderRadius: 14,
     alignItems: 'center',
   },
   saveBtn: {
-    backgroundColor: '#27ae60',
+    backgroundColor: theme.colors.primary,
   },
   saveBtnText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: theme.colors.card,
+    fontSize: 15,
+    fontWeight: '700',
   },
   cancelBtn: {
-    backgroundColor: '#ecf0f1',
+    backgroundColor: theme.colors.background,
   },
   cancelBtnText: {
-    color: '#333',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: '#1f2937',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

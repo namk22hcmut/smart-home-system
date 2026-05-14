@@ -2,7 +2,7 @@
 Automation Service - Handle automation rule evaluation and execution
 """
 
-from models import db, AutomationRule, RuleCondition, Device, SensorData, Notification
+from models import db, AutomationRule, RuleCondition, Device, SensorData, Notification, DeviceActivityLog
 from notification_service import NotificationService
 from datetime import datetime
 import logging
@@ -188,6 +188,25 @@ class AutomationService:
                 notification_type="automation_trigger",
                 device_id=device.device_id
             )
+
+            # Log device activity so dashboard/activity feeds show automation runs
+            try:
+                action = 'turn_on' if rule.action_status == 'on' else 'turn_off'
+                log = DeviceActivityLog(
+                    device_id=device.device_id,
+                    action=action,
+                    old_status=None,
+                    new_status=device.status,
+                    old_level=None,
+                    new_level=device.level,
+                    triggered_by='automation_rule',
+                    reason=f'Automation executed: {rule.rule_name}'
+                )
+                db.session.add(log)
+                db.session.commit()
+                logger.info(f"📝 Automation activity logged for device {device.device_id}")
+            except Exception as e:
+                logger.error(f"Error logging automation activity: {e}")
             
             return True
         except Exception as e:
@@ -270,7 +289,7 @@ class AutomationService:
             return None
     
     @staticmethod
-    def update_rule(rule_id, rule_name=None, logic_type=None, action_status=None, action_level=None, conditions=None):
+    def update_rule(rule_id, rule_name=None, logic_type=None, action_device_id=None, action_status=None, action_level=None, conditions=None):
         """Update an existing rule"""
         try:
             rule = AutomationRule.query.get(rule_id)
@@ -281,6 +300,8 @@ class AutomationService:
                 rule.rule_name = rule_name
             if logic_type:
                 rule.logic_type = logic_type
+            if action_device_id is not None:
+                rule.action_device_id = action_device_id
             if action_status:
                 rule.action_status = action_status
             if action_level is not None:

@@ -15,6 +15,7 @@ import { useRoute } from '@react-navigation/native';
 import { AuthContext } from '../context/AuthContext';
 import { apiService } from '../services/api';
 import { MaterialIcons } from '@expo/vector-icons';
+import { theme } from '../styles/theme';
 
 const DeviceActivityLogsScreen = ({ navigation }) => {
   const route = useRoute();
@@ -118,13 +119,13 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
   const getActionColor = (action) => {
     switch (action) {
       case 'turn_on':
-        return '#4CAF50';
+        return theme.colors.primary;
       case 'turn_off':
-        return '#F44336';
+        return theme.colors.accent;
       case 'set_level':
-        return '#2196F3';
+        return theme.colors.primary;
       default:
-        return '#999';
+        return theme.colors.gray2;
     }
   };
 
@@ -176,7 +177,7 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#2196F3" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     );
   }
@@ -184,7 +185,7 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>📋 Activity Logs</Text>
+        <Text style={styles.headerTitle}>Activity Logs</Text>
         <Text style={styles.headerSubtitle}>{device?.device_name || device?.name || 'Activity Logs'}</Text>
       </View>
 
@@ -194,7 +195,7 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
           style={styles.filterButton}
           onPress={() => setShowFilters(true)}
         >
-          <MaterialIcons name="filter-list" size={20} color="#2196F3" />
+          <MaterialIcons name="filter-list" size={20} color={theme.colors.primary} />
           <Text style={styles.filterButtonText}>Filters</Text>
         </TouchableOpacity>
         {(searchText || actionFilter || triggeredByFilter || startDate || endDate) && (
@@ -207,6 +208,7 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
             }}
           >
             <MaterialIcons name="clear" size={18} color="#F44336" />
+            
             <Text style={styles.clearButtonText}>Clear</Text>
           </TouchableOpacity>
         )}
@@ -219,7 +221,7 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>🔍 Filter Logs</Text>
               <TouchableOpacity onPress={() => setShowFilters(false)}>
-                <MaterialIcons name="close" size={28} color="#333" />
+                <MaterialIcons name="close" size={28} color={theme.colors.text} />
               </TouchableOpacity>
             </View>
 
@@ -231,7 +233,7 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
                 placeholder="e.g., 'User turned on manually'"
                 value={searchText}
                 onChangeText={setSearchText}
-                placeholderTextColor="#999"
+                placeholderTextColor={theme.colors.gray2}
               />
 
               {/* Action Filter */}
@@ -582,7 +584,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
+    color: theme.colors.card,
   },
   headerSubtitle: {
     fontSize: 14,
@@ -595,7 +597,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   summaryCard: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.card,
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
@@ -660,7 +662,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   logItem: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.card,
     borderRadius: 8,
     marginBottom: 8,
     overflow: 'hidden',
@@ -740,7 +742,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: '#FFF',
+    backgroundColor: theme.colors.card,
     borderBottomWidth: 1,
     borderBottomColor: '#EEE',
     alignItems: 'center',
@@ -780,7 +782,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFF',
+    backgroundColor: theme.colors.card,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: '85%',
@@ -853,7 +855,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   filterOptionTextActive: {
-    color: '#FFF',
+    color: theme.colors.card,
   },
   modalFooter: {
     flexDirection: 'row',
@@ -885,7 +887,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   applyButtonText: {
-    color: '#FFF',
+    color: theme.colors.card,
     fontWeight: '600',
     fontSize: 14,
   },

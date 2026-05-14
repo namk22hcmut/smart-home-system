@@ -551,6 +551,7 @@ class DeviceActivityLog(db.Model):
         return {
             'log_id': self.log_id,
             'device_id': self.device_id,
+            'device_name': self.device.device_name if self.device else f'Device {self.device_id}',
             'user_id': self.user_id,
             'action': self.action,
             'old_status': self.old_status,

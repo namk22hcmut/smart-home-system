@@ -2128,6 +2128,7 @@ def update_automation_rule(rule_id):
         data = request.json
         rule_name = data.get('rule_name')
         logic_type = data.get('logic_type')
+        action_device_id = data.get('action_device_id')
         action_status = data.get('action_status')
         action_level = data.get('action_level')
         conditions = data.get('conditions')
@@ -2138,6 +2139,7 @@ def update_automation_rule(rule_id):
             rule_id=rule_id,
             rule_name=rule_name,
             logic_type=logic_type,
+            action_device_id=action_device_id,
             action_status=action_status,
             action_level=action_level,
             conditions=conditions
@@ -2237,32 +2239,42 @@ def get_dashboard_stats(house_id):
         house = House.query.get(house_id)
         if not house or house.user_id != request.user_id:
             return jsonify({'success': False, 'error': 'House not found or access denied'}), 404
+
+        start_date = request.args.get('start_date')
+        start_dt = None
+        if start_date:
+            try:
+                start_dt = datetime.fromisoformat(start_date)
+            except Exception:
+                start_dt = None
         
         # Query stats from database or calculate on-the-fly
         stats = DashboardStats.query.filter_by(house_id=house_id).first()
-        
-        if not stats:
-            # Calculate stats
+
+        if stats:
+            stats_dict = stats.to_dict()
+        else:
+            # Calculate static stats
             floors = Floor.query.filter_by(house_id=house_id).count()
             rooms = Room.query.join(Floor).filter(Floor.house_id == house_id).count()
             devices = Device.query.join(Room).join(Floor).filter(Floor.house_id == house_id).all()
-            
+
             total_devices = len(devices)
             devices_online = sum(1 for d in devices if d.connection_status == 'online')
             devices_offline = total_devices - devices_online
             devices_on = sum(1 for d in devices if d.status == 'on')
             devices_off = total_devices - devices_on
-            
+
             sensors = Sensor.query.join(Room).join(Floor).filter(Floor.house_id == house_id).count()
-            
+
             rules = AutomationRule.query.join(Room).join(Floor).filter(Floor.house_id == house_id).all()
             total_rules = len(rules)
             active_rules = sum(1 for r in rules if r.is_active)
-            
+
             # Get last device change
             last_change = DeviceHistory.query.join(Device).join(Room).join(Floor)\
                 .filter(Floor.house_id == house_id).order_by(DeviceHistory.changed_at.desc()).first()
-            
+
             stats_dict = {
                 'house_id': house_id,
                 'total_devices': total_devices,
@@ -2277,10 +2289,39 @@ def get_dashboard_stats(house_id):
                 'total_floors': floors,
                 'last_device_change': last_change.changed_at.isoformat() if last_change else None
             }
-            
-            return jsonify({'success': True, 'stats': stats_dict}), 200
-        
-        return jsonify({'success': True, 'stats': stats.to_dict()}), 200
+
+        activity_query = DeviceActivityLog.query.join(Device).join(Room).join(Floor).filter(Floor.house_id == house_id)
+        if start_dt:
+            activity_query = activity_query.filter(DeviceActivityLog.timestamp >= start_dt)
+
+        turn_on_count = activity_query.filter(DeviceActivityLog.action == 'turn_on').count()
+        turn_off_count = activity_query.filter(DeviceActivityLog.action == 'turn_off').count()
+        automation_run_count = activity_query.filter(DeviceActivityLog.triggered_by == 'automation_rule').count()
+
+        threshold_query = Alert.query.join(Room).join(Floor).filter(
+            Floor.house_id == house_id,
+            Alert.alert_type == 'threshold'
+        )
+        if start_dt:
+            threshold_query = threshold_query.filter(Alert.created_at >= start_dt)
+
+        threshold_alert_count = threshold_query.count()
+
+        last_turn_on = activity_query.filter(DeviceActivityLog.action == 'turn_on')\
+            .order_by(DeviceActivityLog.timestamp.desc()).first()
+        last_turn_off = activity_query.filter(DeviceActivityLog.action == 'turn_off')\
+            .order_by(DeviceActivityLog.timestamp.desc()).first()
+
+        stats_dict.update({
+            'turn_on_count': turn_on_count,
+            'turn_off_count': turn_off_count,
+            'threshold_alert_count': threshold_alert_count,
+            'automation_run_count': automation_run_count,
+            'last_turn_on_at': last_turn_on.timestamp.isoformat() if last_turn_on else None,
+            'last_turn_off_at': last_turn_off.timestamp.isoformat() if last_turn_off else None,
+        })
+
+        return jsonify({'success': True, 'stats': stats_dict}), 200
     except Exception as e:
         logger.error(f"Error fetching dashboard stats: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500

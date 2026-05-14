@@ -14,6 +14,7 @@ import {
   Modal,
 } from 'react-native';
 import { apiService } from '../../services/api';
+import { theme } from '../../styles/theme';
 
 export default function UserManagement({ navigation }) {
   const [users, setUsers] = useState([]);
@@ -21,6 +22,21 @@ export default function UserManagement({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      title: 'User Management',
+      headerStyle: {
+        backgroundColor: theme.colors.primary,
+      },
+      headerTintColor: theme.colors.card,
+      headerTitleStyle: {
+        fontWeight: '700',
+        color: theme.colors.card,
+      },
+    });
+  }, [navigation]);
 
   // Load users
   const loadUsers = async (showLoader = true) => {
@@ -151,7 +167,7 @@ export default function UserManagement({ navigation }) {
       style={[
         styles.userCard,
         item.status === 'inactive' && { opacity: 0.6 },
-        item.role === 'admin' && { borderLeftColor: '#e74c3c' },
+        item.role === 'admin' && { borderLeftColor: theme.colors.accent },
       ]}
       onPress={() => setSelectedUser(item)}
     >
@@ -161,7 +177,7 @@ export default function UserManagement({ navigation }) {
           <Text style={styles.email}>{item.email}</Text>
         </View>
         <View style={styles.roleBadge}>
-          <Text style={[styles.roleText, item.role === 'admin' && { color: '#e74c3c' }]}>
+          <Text style={[styles.roleText, item.role === 'admin' && { color: theme.colors.accent }]}>
             {item.role === 'admin' ? '🔑 ' : '👤 '}
             {item.role.toUpperCase()}
           </Text>
@@ -169,7 +185,7 @@ export default function UserManagement({ navigation }) {
       </View>
 
       <View style={styles.statusRow}>
-        <Text style={[styles.status, { color: item.status === 'active' ? '#2ecc71' : '#e74c3c' }]}>
+        <Text style={[styles.status, { color: item.status === 'active' ? theme.colors.primary : theme.colors.accent }]}>
           {item.status === 'active' ? '🟢 ' : '🔴 '}
           {item.status.toUpperCase()}
         </Text>
@@ -183,14 +199,14 @@ export default function UserManagement({ navigation }) {
       <View style={styles.actionButtons}>
         {item.status === 'active' ? (
           <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#e74c3c' }]}
+            style={[styles.actionBtn, { backgroundColor: theme.colors.accent }]}
             onPress={() => disableUser(item.user_id, item.username)}
           >
             <Text style={styles.actionBtnText}>Disable</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#2ecc71' }]}
+            style={[styles.actionBtn, { backgroundColor: theme.colors.primary }]}
             onPress={() => enableUser(item.user_id, item.username)}
           >
             <Text style={styles.actionBtnText}>Enable</Text>
@@ -198,7 +214,7 @@ export default function UserManagement({ navigation }) {
         )}
 
         <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: '#3498db' }]}
+          style={[styles.actionBtn, { backgroundColor: theme.colors.primary }]}
           onPress={() => changeUserRole(item.user_id, item.username, item.role)}
         >
           <Text style={styles.actionBtnText}>
@@ -207,10 +223,10 @@ export default function UserManagement({ navigation }) {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: '#95a5a6' }]}
+          style={[styles.actionBtn, { backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.primary }]}
           onPress={() => deleteUser(item.user_id, item.username)}
         >
-          <Text style={styles.actionBtnText}>Delete</Text>
+          <Text style={[styles.actionBtnText, styles.actionBtnTextOutline]}>Delete</Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -219,7 +235,7 @@ export default function UserManagement({ navigation }) {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#3498db" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={styles.loadingText}>Loading users...</Text>
       </View>
     );
@@ -246,7 +262,7 @@ export default function UserManagement({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ecf0f1',
+    backgroundColor: theme.colors.background,
   },
   centerContainer: {
     flex: 1,
@@ -260,19 +276,19 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#7f8c8d',
+    color: theme.colors.gray1,
   },
   emptyText: {
     fontSize: 16,
-    color: '#95a5a6',
+    color: theme.colors.gray2,
   },
   userCard: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.card,
     borderRadius: 8,
     padding: 12,
     marginBottom: 12,
     borderLeftWidth: 4,
-    borderLeftColor: '#3498db',
+    borderLeftColor: theme.colors.primary,
     elevation: 2,
   },
   userHeader: {
@@ -284,15 +300,15 @@ const styles = StyleSheet.create({
   username: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: theme.colors.text,
   },
   email: {
     fontSize: 13,
-    color: '#7f8c8d',
+    color: theme.colors.gray1,
     marginTop: 4,
   },
   roleBadge: {
-    backgroundColor: '#ecf0f1',
+    backgroundColor: theme.colors.background,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
@@ -300,7 +316,7 @@ const styles = StyleSheet.create({
   roleText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#3498db',
+    color: theme.colors.primary,
   },
   statusRow: {
     flexDirection: 'row',
@@ -314,11 +330,11 @@ const styles = StyleSheet.create({
   },
   fullName: {
     fontSize: 12,
-    color: '#7f8c8d',
+    color: theme.colors.gray1,
   },
   lastLogin: {
     fontSize: 12,
-    color: '#95a5a6',
+    color: theme.colors.gray2,
     marginBottom: 10,
   },
   actionButtons: {
@@ -333,8 +349,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionBtnText: {
-    color: '#fff',
+    color: theme.colors.card,
     fontSize: 12,
     fontWeight: '600',
+  },
+  actionBtnTextOutline: {
+    color: theme.colors.primary,
   },
 });

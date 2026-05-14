@@ -12,12 +12,28 @@ import {
   RefreshControl,
 } from 'react-native';
 import { apiService } from '../../services/api';
+import { theme } from '../../styles/theme';
 
 export default function ActivityLogs({ navigation }) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedLog, setSelectedLog] = useState(null);
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      title: 'Activity Logs',
+      headerStyle: {
+        backgroundColor: theme.colors.primary,
+      },
+      headerTintColor: theme.colors.card,
+      headerTitleStyle: {
+        fontWeight: '700',
+        color: theme.colors.card,
+      },
+    });
+  }, [navigation]);
 
   // Load activity logs
   const loadLogs = async (showLoader = true) => {
@@ -45,14 +61,14 @@ export default function ActivityLogs({ navigation }) {
   // Get action icon and color
   const getActionStyle = (action) => {
     const actions = {
-      user_disabled: { icon: '🔴', color: '#e74c3c' },
-      user_enabled: { icon: '🟢', color: '#2ecc71' },
-      user_role_changed: { icon: '🔑', color: '#3498db' },
-      user_deleted: { icon: '🗑️', color: '#e67e22' },
-      house_shared: { icon: '🏠', color: '#9b59b6' },
-      stats_viewed: { icon: '📊', color: '#1abc9c' },
+      user_disabled: { icon: '●', color: theme.colors.primary },
+      user_enabled: { icon: '●', color: theme.colors.primary },
+      user_role_changed: { icon: '◆', color: theme.colors.accent },
+      user_deleted: { icon: '×', color: theme.colors.accent },
+      house_shared: { icon: '⬟', color: theme.colors.primary },
+      stats_viewed: { icon: '◫', color: theme.colors.primary },
     };
-    return actions[action] || { icon: '📋', color: '#7f8c8d' };
+    return actions[action] || { icon: '•', color: theme.colors.gray2 };
   };
 
   // Format timestamp
@@ -75,8 +91,8 @@ export default function ActivityLogs({ navigation }) {
             <Text style={styles.action}>{item.action.replace(/_/g, ' ').toUpperCase()}</Text>
             <Text style={styles.username}>User: {item.username || 'Unknown'}</Text>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: item.status === 'success' ? '#d4edda' : '#f8d7da' }]}>
-            <Text style={[styles.statusText, { color: item.status === 'success' ? '#155724' : '#856404' }]}>
+          <View style={[styles.statusBadge, { backgroundColor: theme.colors.background }]}>
+            <Text style={[styles.statusText, { color: item.status === 'success' ? theme.colors.primary : theme.colors.accent }]}>
               {item.status}
             </Text>
           </View>
@@ -102,7 +118,7 @@ export default function ActivityLogs({ navigation }) {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#1abc9c" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={styles.loadingText}>Loading activity logs...</Text>
       </View>
     );
@@ -139,7 +155,7 @@ function DetailRow({ label, value }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ecf0f1',
+    backgroundColor: theme.colors.background,
   },
   centerContainer: {
     flex: 1,
@@ -153,19 +169,19 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#7f8c8d',
+    color: theme.colors.gray1,
   },
   emptyText: {
     fontSize: 16,
-    color: '#95a5a6',
+    color: theme.colors.gray2,
   },
   logCard: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.card,
     borderRadius: 8,
     padding: 12,
     marginBottom: 12,
     borderLeftWidth: 4,
-    borderLeftColor: '#3498db',
+    borderLeftColor: theme.colors.primary,
     elevation: 2,
   },
   logHeader: {
@@ -183,11 +199,11 @@ const styles = StyleSheet.create({
   action: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: theme.colors.text,
   },
   username: {
     fontSize: 12,
-    color: '#7f8c8d',
+    color: theme.colors.gray1,
     marginTop: 4,
   },
   statusBadge: {
@@ -201,19 +217,19 @@ const styles = StyleSheet.create({
   },
   timestamp: {
     fontSize: 11,
-    color: '#95a5a6',
+    color: theme.colors.gray2,
     marginBottom: 8,
   },
   description: {
     fontSize: 12,
-    color: '#7f8c8d',
+    color: theme.colors.gray1,
     fontStyle: 'italic',
   },
   expandedDetails: {
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#ecf0f1',
+    borderTopColor: theme.colors.gray2,
   },
   detailRow: {
     flexDirection: 'row',
@@ -222,12 +238,12 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 11,
-    color: '#7f8c8d',
+    color: theme.colors.gray1,
     fontWeight: '600',
   },
   detailValue: {
     fontSize: 11,
-    color: '#2c3e50',
+    color: theme.colors.text,
     flex: 1,
     textAlign: 'right',
   },

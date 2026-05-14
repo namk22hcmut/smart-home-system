@@ -15,6 +15,7 @@ import { apiService } from '../services/api';
 import authService from '../services/auth';
 import { AuthContext } from '../context/AuthContext';
 import NotificationSocket from '../services/notification_socket';
+import { theme } from '../styles/theme';
 
 export default function HomeScreen({ navigation }) {
   const [houses, setHouses] = useState([]);
@@ -85,16 +86,20 @@ export default function HomeScreen({ navigation }) {
       loadHouses();
       loadUser();
       loadUnreadCount();
-      // ⚠️ Skip setupSocketIO for now - token/user_id not accessible from context
-      // setupSocketIO will be added in a future update
-      
-      // Set header with logout button and notification button when signed in
       navigation.setOptions({
         headerShown: true,
         title: 'Smart Home',
+        headerStyle: {
+          backgroundColor: theme.colors.primary,
+        },
+        headerTintColor: theme.colors.card,
+        headerTitleStyle: {
+          fontWeight: '700',
+          color: theme.colors.card,
+        },
         headerRight: () => (
           <View style={styles.headerButtons}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.notifButton}
               onPress={() => navigation.navigate('NotificationCenter')}
             >
@@ -107,7 +112,7 @@ export default function HomeScreen({ navigation }) {
                 </View>
               )}
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.logoutButton}
               onPress={handleLogout}
             >
@@ -122,22 +127,26 @@ export default function HomeScreen({ navigation }) {
         NotificationSocket.disconnect();
       };
     } else {
-      // Show header with Login/Sign Up buttons when not signed in
       navigation.setOptions({
         headerShown: true,
         title: 'Smart Home',
         headerStyle: {
-          backgroundColor: '#f8f9fa',
+          backgroundColor: theme.colors.background,
+        },
+        headerTintColor: theme.colors.primary,
+        headerTitleStyle: {
+          fontWeight: '700',
+          color: theme.colors.primary,
         },
         headerRight: () => (
           <View style={styles.headerButtons}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.headerLoginBtn}
               onPress={() => navigation.navigate('Login')}
             >
               <Text style={styles.headerLoginText}>Login</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.headerSignupBtn}
               onPress={() => navigation.navigate('Signup')}
             >
@@ -196,13 +205,14 @@ export default function HomeScreen({ navigation }) {
       <View style={styles.welcomeContainer}>
         <View style={styles.welcomeContent}>
           <View style={styles.welcomeHeader}>
+            <Text style={styles.welcomeTitle}>Smart Home</Text>
             <Text style={styles.welcomeSubtitle}>Control Your Home Anywhere</Text>
           </View>
 
           <View style={styles.features}>
-            <Feature icon="🏠" title="Smart Control" desc="Control all your devices from one place" />
-            <Feature icon="🔔" title="Get Notified" desc="Real-time notifications for your home" />
-            <Feature icon="⚡" title="Save Energy" desc="Track and optimize your energy usage" />
+            <Feature icon="" title="Smart Control" desc="Control all your devices from one place" />
+            <Feature icon="" title="Get Notified" desc="Real-time notifications for your home" />
+            <Feature icon="" title="Save Energy" desc="Track and optimize your energy usage" />
           </View>
 
           <Text style={styles.footer}>Smart Home © 2026</Text>
@@ -220,7 +230,7 @@ export default function HomeScreen({ navigation }) {
         </View>
       )}
       <View style={styles.headerRow}>
-        <Text style={styles.header}>🏠 My Houses</Text>
+        <Text style={styles.sectionTitle}>My Houses</Text>
         <View style={styles.headerButtonsRow}>
           <TouchableOpacity 
             style={[styles.manageBtn, !houses.length && styles.disabledBtn]}
@@ -233,18 +243,18 @@ export default function HomeScreen({ navigation }) {
             }}
             disabled={!houses.length}
           >
-            <Text style={styles.manageBtnText}>📊 Dashboard</Text>
+            <Text style={styles.manageBtnText}>Dashboard</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.manageBtn}
             onPress={() => navigation.navigate('Houses')}
           >
-            <Text style={styles.manageBtnText}>⚙️ Manage</Text>
+            <Text style={styles.manageBtnText}>Manage</Text>
           </TouchableOpacity>
         </View>
       </View>
       {loading ? (
-        <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 20 }} />
+        <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 20 }} />
       ) : (
         <FlatList
           data={houses}
@@ -273,7 +283,7 @@ function Feature({ icon, title, desc }) {
 const styles = StyleSheet.create({
   welcomeContainer: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.colors.background,
     justifyContent: 'space-between',
   },
   welcomeContent: {
@@ -285,11 +295,40 @@ const styles = StyleSheet.create({
   welcomeHeader: {
     marginTop: 20,
   },
+  welcomeTitle: {
+    fontSize: 34,
+    fontWeight: '700',
+    color: theme.colors.primary,
+    marginBottom: 8,
+  },
   welcomeSubtitle: {
     fontSize: 16,
-    color: '#666',
+    color: theme.colors.gray1,
     fontWeight: '500',
     marginBottom: 40,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  statusPill: {
+    backgroundColor: theme.colors.background,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  statusPillActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  statusPillGuest: {
+    backgroundColor: theme.colors.gray2,
+  },
+  statusPillText: {
+    color: theme.colors.card,
+    fontSize: 12,
+    fontWeight: '700',
   },
   features: {
     marginVertical: 20,
@@ -306,17 +345,17 @@ const styles = StyleSheet.create({
   featureTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: theme.colors.text,
     marginBottom: 4,
   },
   featureDesc: {
     fontSize: 14,
-    color: '#666',
+    color: theme.colors.gray1,
     lineHeight: 20,
   },
   footer: {
     textAlign: 'center',
-    color: '#999',
+    color: theme.colors.gray2,
     fontSize: 12,
   },
   headerButtons: {
@@ -326,26 +365,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerLoginBtn: {
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.colors.primary,
     borderRadius: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
   headerLoginText: {
-    color: '#fff',
+    color: theme.colors.card,
     fontSize: 12,
     fontWeight: '600',
   },
   headerSignupBtn: {
-    backgroundColor: 'transparent',
+    backgroundColor: theme.colors.card,
     borderWidth: 1.5,
-    borderColor: '#007AFF',
+    borderColor: theme.colors.primary,
     borderRadius: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
   headerSignupText: {
-    color: '#007AFF',
+    color: theme.colors.primary,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -353,7 +392,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
     paddingTop: 10,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.colors.background,
   },
   centerContainer: {
     flex: 1,
@@ -361,28 +400,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoutButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   logoutText: {
-    color: '#007AFF',
-    fontSize: 14,
+    color: theme.colors.card,
+    fontSize: 12,
     fontWeight: '600',
   },
   notifButton: {
-    marginRight: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    marginRight: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
     position: 'relative',
   },
   notifButtonText: {
-    fontSize: 18,
+    fontSize: 16,
+    color: theme.colors.card,
   },
   badge: {
     position: 'absolute',
     top: 0,
     right: 0,
-    backgroundColor: '#d32f2f',
+    backgroundColor: theme.colors.accent,
     borderRadius: 10,
     minWidth: 20,
     height: 20,
@@ -391,26 +431,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   badgeText: {
-    color: '#fff',
+    color: theme.colors.card,
     fontSize: 10,
     fontWeight: 'bold',
   },
   userInfo: {
-    backgroundColor: '#e3f2fd',
+    backgroundColor: theme.colors.card,
     borderRadius: 8,
     padding: 12,
     marginVertical: 12,
   },
   welcomeText: {
-    color: '#007AFF',
+    color: theme.colors.primary,
     fontSize: 14,
     fontWeight: '500',
   },
-  header: {
-    fontSize: 28,
+  sectionTitle: {
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
+    color: theme.colors.text,
     flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
   },
   headerRow: {
     flexDirection: 'row',
@@ -421,24 +463,57 @@ const styles = StyleSheet.create({
   headerButtonsRow: {
     flexDirection: 'row',
     gap: 8,
+    flexShrink: 1,
   },
   manageBtn: {
-    backgroundColor: '#ff6b6b',
+    backgroundColor: theme.colors.primary,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 6,
   },
   disabledBtn: {
-    backgroundColor: '#ccc',
+    backgroundColor: theme.colors.gray2,
     opacity: 0.6,
   },
   manageBtnText: {
-    color: 'white',
+    color: theme.colors.card,
     fontSize: 14,
     fontWeight: '600',
   },
+  authActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+    marginBottom: 24,
+  },
+  authPrimaryBtn: {
+    flex: 1,
+    backgroundColor: theme.colors.primary,
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  authPrimaryText: {
+    color: theme.colors.card,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  authSecondaryBtn: {
+    flex: 1,
+    backgroundColor: theme.colors.card,
+    borderWidth: 1.5,
+    borderColor: theme.colors.primary,
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  authSecondaryText: {
+    color: theme.colors.primary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.card,
     borderRadius: 12,
     padding: 16,
     marginVertical: 8,
@@ -450,16 +525,16 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
+    color: theme.colors.text,
     marginBottom: 4,
   },
   cardSubtitle: {
     fontSize: 14,
-    color: '#666',
+    color: theme.colors.gray1,
     marginBottom: 8,
   },
   cardDetail: {
     fontSize: 12,
-    color: '#999',
+    color: theme.colors.gray2,
   },
 });

@@ -19,6 +19,14 @@ import adafruitService from '../services/adafruit';
 import realtimeService from '../services/realtime';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LineChart, BarChart } from 'react-native-chart-kit';
+import { theme } from '../styles/theme';
+
+// Helper: parse ISO timestamp safely (append Z if naive timestamp)
+const parseISOToDate = (ts) => {
+  if (!ts) return null;
+  if (/(Z|[+\-]\d{2}:\d{2})$/.test(ts)) return new Date(ts);
+  return new Date(ts + 'Z');
+};
 
 const DashboardScreen = ({ navigation }) => {
   const route = useRoute();
@@ -54,6 +62,21 @@ const DashboardScreen = ({ navigation }) => {
   const [showFilters, setShowFilters] = useState(false);
 
   const screenWidth = Dimensions.get('window').width;
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      title: 'Dashboard',
+      headerStyle: {
+        backgroundColor: theme.colors.primary,
+      },
+      headerTintColor: theme.colors.card,
+      headerTitleStyle: {
+        fontWeight: '700',
+        color: theme.colors.card,
+      },
+    });
+  }, [navigation]);
 
   // Load houses on mount
   useEffect(() => {
@@ -199,10 +222,11 @@ const DashboardScreen = ({ navigation }) => {
       if (!selectedHouse || !selectedHouse.house_id) return;
       
       const houseId = selectedHouse.house_id || selectedHouse.id;
-      console.log('📊 Loading dashboard for house:', houseId);
+      const startDate = getDateRangeQuery();
 
       // Get stats
-      const statsResponse = await apiService.get(`/houses/${houseId}/stats`);
+      const statsResponse = await apiService.get(`/houses/${houseId}/stats?start_date=${startDate}`);
+      
       if (statsResponse.success) {
         setStats(statsResponse.stats);
       }
@@ -214,7 +238,6 @@ const DashboardScreen = ({ navigation }) => {
       }
 
       // Get activities with filters
-      const startDate = getDateRangeQuery();
       const activitiesResponse = await apiService.get(
         `/houses/${houseId}/activity-logs?limit=50&start_date=${startDate}`
       );
@@ -226,8 +249,8 @@ const DashboardScreen = ({ navigation }) => {
         setActivities(activityList);
       }
 
-      // Generate chart data from activities
-      generateChartData(activitiesResponse.logs || []);
+      // Generate chart data from activities and stats
+      generateChartData(activitiesResponse.logs || [], statsResponse.stats || {});
       
       // 📌 REMOVED: Auto-fetch Adafruit sensor data
       // Now: Only fetch on-demand (user clicks sensor tab or refresh)
@@ -329,23 +352,61 @@ const DashboardScreen = ({ navigation }) => {
   };
 
   // Generate chart data from activity logs
-  const generateChartData = (activityList) => {
-    // Count activities by type
-    const actionCounts = {};
-    activityList.forEach(log => {
-      const action = log.action || 'other';
-      actionCounts[action] = (actionCounts[action] || 0) + 1;
+  const generateChartData = (activityList, dashboardStats = {}) => {
+    // Count activity by hour
+    const hourlyData = Array(24).fill(0);
+    activityList.forEach((log) => {
+      if (log.timestamp) {
+        const d = parseISOToDate(log.timestamp) || new Date(log.timestamp);
+        const hour = d.getHours();
+        hourlyData[hour]++;
+      }
     });
 
-    const chartLabels = Object.keys(actionCounts).slice(0, 6);
-    const chartData = chartLabels.map(label => actionCounts[label]);
+    // Get top 5 active devices
+    const deviceCounts = {};
+    activityList.forEach((log) => {
+      const deviceId = log.device_id;
+      deviceCounts[deviceId] = (deviceCounts[deviceId] || 0) + 1;
+    });
+
+    const topDevices = Object.entries(deviceCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+
+    // Create hourly labels - show every 3rd hour to avoid crowding
+    const hourlyLabels = Array.from({ length: 24 }, (_, i) => i % 3 === 0 ? `${i}h` : '');
+
+    // Build device names map from activity logs
+    const deviceNamesMap = {};
+    activityList.forEach((log) => {
+      if (log.device_name && !deviceNamesMap[log.device_id]) {
+        deviceNamesMap[log.device_id] = log.device_name;
+      }
+    });
 
     setSensorChartData({
-      labels: chartLabels.map(label => label.replace('_', ' ').substring(0, 8)),
-      datasets: [{
-        data: chartData.length > 0 ? chartData : [0],
-      }],
+      hourly: {
+        labels: hourlyLabels,
+        datasets: [{
+          data: hourlyData,
+        }],
+      },
+      topDevices: topDevices.length > 0 
+        ? {
+            labels: topDevices.map(([deviceId]) => deviceNamesMap[deviceId] || `Device ${deviceId}`),
+            datasets: [{
+              data: topDevices.map(d => d[1]),
+            }],
+          }
+        : null,
     });
+  };
+
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) return 'N/A';
+    const date = parseISOToDate(timestamp);
+    return date ? date.toLocaleString() : 'N/A';
   };
 
   const onRefresh = async () => {
@@ -353,6 +414,9 @@ const DashboardScreen = ({ navigation }) => {
     await loadDashboardData();
     setRefreshing(false);
   };
+
+  const onOffActivities = activities.filter((activity) => ['turn_on', 'turn_off'].includes(activity.action));
+  const automationActivities = activities.filter((activity) => activity.triggered_by === 'automation_rule');
 
   // Render house selector modal
   const renderHouseSelector = () => (
@@ -365,7 +429,7 @@ const DashboardScreen = ({ navigation }) => {
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>📍 Select House</Text>
+            <Text style={styles.modalTitle}>Select House</Text>
             <TouchableOpacity onPress={() => setShowHouseSelector(false)}>
               <MaterialIcons name="close" size={24} color="#333" />
             </TouchableOpacity>
@@ -408,7 +472,7 @@ const DashboardScreen = ({ navigation }) => {
       <View style={styles.modalOverlay}>
         <View style={[styles.modalContent, { maxHeight: '80%' }]}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>⚙️ Filters & Sort</Text>
+            <Text style={styles.modalTitle}>Filters & Sort</Text>
             <TouchableOpacity onPress={() => setShowFilters(false)}>
               <MaterialIcons name="close" size={24} color="#333" />
             </TouchableOpacity>
@@ -417,7 +481,7 @@ const DashboardScreen = ({ navigation }) => {
           <ScrollView style={styles.filterScroll}>
             {/* Date Range Filter */}
             <View style={styles.filterGroup}>
-              <Text style={styles.filterLabel}>📅 Date Range</Text>
+                  <Text style={styles.filterLabel}>Date Range</Text>
               {['today', 'week', 'month'].map(range => (
                 <TouchableOpacity
                   key={range}
@@ -436,7 +500,7 @@ const DashboardScreen = ({ navigation }) => {
 
             {/* Activity Type Filter */}
             <View style={styles.filterGroup}>
-              <Text style={styles.filterLabel}>🎯 Activity Type</Text>
+              <Text style={styles.filterLabel}>Activity Type</Text>
               {['all', 'turn_on', 'turn_off', 'set_level'].map(type => (
                 <TouchableOpacity
                   key={type}
@@ -480,7 +544,7 @@ const DashboardScreen = ({ navigation }) => {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#4CAF50" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     );
   }
@@ -501,37 +565,134 @@ const DashboardScreen = ({ navigation }) => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {/* Header with House Selector */}
-        <View style={styles.header}>
-          <View style={styles.headerTop}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>📊 Dashboard</Text>
-              <TouchableOpacity 
-                style={styles.houseSelectorButton}
-                onPress={() => setShowHouseSelector(true)}
-              >
-                <Text style={styles.houseSelectorText}>
-                  🏠 {selectedHouse?.name || selectedHouse?.house_name || 'Select House'}
-                </Text>
-                <MaterialIcons name="expand-more" size={20} color="#fff" />
-              </TouchableOpacity>
-            </View>
-            
-            {/* Filter Button */}
-            <TouchableOpacity 
-              style={styles.filterButton}
-              onPress={() => setShowFilters(true)}
-            >
-              <MaterialIcons name="tune" size={24} color="#fff" />
-            </TouchableOpacity>
-          </View>
+        <View style={styles.contentHeader}>
+          <TouchableOpacity
+            style={styles.houseSelectorButton}
+            onPress={() => setShowHouseSelector(true)}
+          >
+            <Text style={styles.houseSelectorText}>
+              {selectedHouse?.name || selectedHouse?.house_name || 'Select House'}
+            </Text>
+            <MaterialIcons name="expand-more" size={20} color={theme.colors.primary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => setShowFilters(true)}
+          >
+            <MaterialIcons name="tune" size={24} color={theme.colors.primary} />
+          </TouchableOpacity>
         </View>
 
         {stats && (
           <>
+            {/* Device Activity */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Device Activity</Text>
+              <View style={styles.sectionSubtitleRow}>
+                <Text style={styles.sectionSubtitle}>Bật/tắt thiết bị và thời điểm gần nhất</Text>
+                <Text style={styles.filterInfo}>{onOffActivities.length} events</Text>
+              </View>
+
+              <View style={[styles.statsGrid, styles.centerStatsGrid]}>
+                <View style={styles.statsPair}>
+                  <View style={{ marginRight: 12 }}>
+                    <StatCard
+                      title="Turn On"
+                      value={stats.turn_on_count || 0}
+                      color="#29B6F6"
+                      icon="power"
+                    />
+                  </View>
+
+                  <View>
+                    <StatCard
+                      title="Turn Off"
+                      value={stats.turn_off_count || 0}
+                      color="#FFA726"
+                      icon="power-off"
+                    />
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.switchSummary}>
+                <View style={styles.switchSummaryRow}>
+                  <Text style={styles.switchSummaryLabel}>Last Turn On</Text>
+                  <Text style={styles.switchSummaryValue}>{formatTimestamp(stats.last_turn_on_at)}</Text>
+                </View>
+                <View style={styles.switchSummaryRow}>
+                  <Text style={styles.switchSummaryLabel}>Last Turn Off</Text>
+                  <Text style={styles.switchSummaryValue}>{formatTimestamp(stats.last_turn_off_at)}</Text>
+                </View>
+              </View>
+
+              <View style={styles.timelineCard}>
+                <Text style={styles.timelineTitle}>On/Off Timeline</Text>
+                {onOffActivities.length > 0 ? (
+                  <View>
+                    {onOffActivities.slice(0, 8).map((activity, index) => (
+                      <ActivityItem key={activity.log_id || index} activity={activity} />
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.emptyText}>No on/off events found</Text>
+                )}
+              </View>
+            </View>
+
+            {/* Automation Activity */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Automation Activity</Text>
+              <View style={styles.sectionSubtitleRow}>
+                <Text style={styles.sectionSubtitle}>Ngưỡng cảnh báo và automation tự chạy</Text>
+                <Text style={styles.filterInfo}>{automationActivities.length} automation logs</Text>
+              </View>
+
+              <View style={styles.statsGrid}>
+                <StatCard
+                  title="Threshold Alerts"
+                  value={stats.threshold_alert_count || 0}
+                  color="#FF5252"
+                  icon="warning"
+                />
+                <StatCard
+                  title="Automation Runs"
+                  value={stats.automation_run_count || 0}
+                  color="#4CAF50"
+                  icon="bolt"
+                />
+                <StatCard
+                  title="Active Rules"
+                  value={`${stats.automation_rules_active || 0}/${stats.automation_rules_total || 0}`}
+                  color="#FFB74D"
+                  icon="rule"
+                />
+                <StatCard
+                  title="Threshold + Auto"
+                  value={(stats.threshold_alert_count || 0) + (stats.automation_run_count || 0)}
+                  color="#AB47BC"
+                  icon="analytics"
+                />
+              </View>
+
+              <View style={styles.timelineCard}>
+                <Text style={styles.timelineTitle}>Automation Timeline</Text>
+                {automationActivities.length > 0 ? (
+                  <View>
+                    {automationActivities.slice(0, 8).map((activity, index) => (
+                      <ActivityItem key={activity.log_id || index} activity={activity} />
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.emptyText}>No automation-triggered events found</Text>
+                )}
+              </View>
+            </View>
+
             {/* Devices Stats */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>🔌 Device Statistics</Text>
+              <Text style={styles.sectionTitle}>Device Status</Text>
 
               <View style={styles.statsGrid}>
                 <StatCard
@@ -539,18 +700,6 @@ const DashboardScreen = ({ navigation }) => {
                   value={stats.total_devices || 0}
                   color="#FF6B6B"
                   icon="devices"
-                />
-                <StatCard
-                  title="Online"
-                  value={stats.devices_online || 0}
-                  color="#4CAF50"
-                  icon="cloud-done"
-                />
-                <StatCard
-                  title="Offline"
-                  value={stats.devices_offline || 0}
-                  color="#FFA726"
-                  icon="cloud-off"
                 />
                 <StatCard
                   title="Turned On"
@@ -564,7 +713,7 @@ const DashboardScreen = ({ navigation }) => {
             {/* Device Usage Today */}
             {deviceUsage.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>⏱️ Device Usage Today</Text>
+                <Text style={styles.sectionTitle}>Device Usage Today</Text>
                 
                 <View style={styles.usageList}>
                   {deviceUsage.map((device, idx) => (
@@ -597,13 +746,13 @@ const DashboardScreen = ({ navigation }) => {
             {adafruitSensors.length > 0 && (
               <View style={styles.section}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={styles.sectionTitle}>📡 Live Sensor Trends</Text>
+                  <Text style={styles.sectionTitle}>Live Sensor Trends</Text>
                   <TouchableOpacity 
                     onPress={loadAdafruitSensorData}
                     disabled={loadingAdafruitData}
                     style={{ padding: 8 }}
                   >
-                    <Text style={{ fontSize: 18 }}>🔄</Text>
+                    <MaterialIcons name="refresh" size={18} color={theme.colors.card} />
                   </TouchableOpacity>
                 </View>
                 
@@ -651,9 +800,9 @@ const DashboardScreen = ({ navigation }) => {
                       width={screenWidth - 32}
                       height={220}
                       chartConfig={{
-                        backgroundColor: '#fff',
-                        backgroundGradientFrom: '#fff',
-                        backgroundGradientTo: '#fff',
+                        backgroundColor: theme.colors.card,
+                        backgroundGradientFrom: theme.colors.card,
+                        backgroundGradientTo: theme.colors.card,
                         color: () => '#2196F3',
                         strokeWidth: 2,
                       }}
@@ -671,31 +820,62 @@ const DashboardScreen = ({ navigation }) => {
               </View>
             )}
 
-            {/* Activity Distribution Chart */}
-            {sensorChartData && sensorChartData.datasets[0].data.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>📈 Activity Distribution</Text>
-                <View style={styles.chartContainer}>
-                  <BarChart
-                    data={sensorChartData}
-                    width={screenWidth - 32}
-                    height={220}
-                    chartConfig={{
-                      backgroundColor: '#fff',
-                      backgroundGradientFrom: '#fff',
-                      backgroundGradientTo: '#fff',
-                      color: () => '#4CAF50',
-                      barPercentage: 0.8,
-                    }}
-                    style={styles.chart}
-                  />
-                </View>
-              </View>
+            {/* Activity Overview Charts */}
+            {sensorChartData && (
+              <>
+                {/* Hourly Activity Distribution */}
+                {sensorChartData.hourly && sensorChartData.hourly.datasets[0].data.some(v => v > 0) && (
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>⏰ Hourly Activity Distribution</Text>
+                    <Text style={styles.sectionSubtitle}>Activity count by hour</Text>
+                    <View style={styles.chartContainer}>
+                      <LineChart
+                        data={sensorChartData.hourly}
+                        width={screenWidth - 32}
+                        height={260}
+                        chartConfig={{
+                          backgroundColor: theme.colors.card,
+                          backgroundGradientFrom: theme.colors.card,
+                          backgroundGradientTo: theme.colors.card,
+                          color: () => '#29B6F6',
+                          strokeWidth: 2,
+                          useShadowColorFromDataset: false,
+                        }}
+                        style={styles.chart}
+                        bezier
+                      />
+                    </View>
+                  </View>
+                )}
+
+                {/* Top Active Devices */}
+                {sensorChartData.topDevices && sensorChartData.topDevices.datasets[0].data.length > 0 && (
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>📊 Top Active Devices</Text>
+                    <Text style={styles.sectionSubtitle}>Most used devices</Text>
+                    <View style={styles.chartContainer}>
+                      <BarChart
+                        data={sensorChartData.topDevices}
+                        width={screenWidth - 32}
+                        height={280}
+                        chartConfig={{
+                          backgroundColor: theme.colors.card,
+                          backgroundGradientFrom: theme.colors.card,
+                          backgroundGradientTo: theme.colors.card,
+                          color: () => '#FFA726',
+                          barPercentage: 0.7,
+                        }}
+                        style={styles.chart}
+                      />
+                    </View>
+                  </View>
+                )}
+              </>
             )}
 
             {/* Infrastructure Stats */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>🏠 Infrastructure</Text>
+<Text style={styles.sectionTitle}>Infrastructure</Text>
 
               <View style={styles.statsGrid}>
                 <StatCard
@@ -751,26 +931,6 @@ const DashboardScreen = ({ navigation }) => {
               </View>
             </View>
 
-            {/* Recent Activities with Filter Info */}
-            <View style={styles.section}>
-              <View style={styles.activityHeader}>
-                <Text style={styles.sectionTitle}>📝 Recent Activities</Text>
-                <Text style={styles.filterInfo}>
-                  {activities.length} {filterType !== 'all' ? '- ' + filterType.replace('_', ' ') : 'total'}
-                </Text>
-              </View>
-
-              {activities.length > 0 ? (
-                <View>
-                  {activities.slice(0, 10).map((activity, index) => (
-                    <ActivityItem key={activity.log_id || index} activity={activity} />
-                  ))}
-                </View>
-              ) : (
-                <Text style={styles.emptyText}>No activities matching filters</Text>
-              )}
-            </View>
-
             {/* Last Update */}
             <View style={styles.footer}>
               <Text style={styles.footerText}>
@@ -812,25 +972,25 @@ const ActivityItem = ({ activity }) => {
   const getActionIcon = (action) => {
     switch (action) {
       case 'turn_on':
-        return '✓ On';
+          return 'ON';
       case 'turn_off':
-        return '✗ Off';
+          return 'OFF';
       case 'set_level':
-        return '⚡ Level';
+          return 'LEVEL';
       default:
         return action;
     }
   };
 
   const formatTime = (timestamp) => {
-    const date = new Date(timestamp);
+    const date = parseISOToDate(timestamp) || new Date(timestamp);
     const now = new Date();
     const diff = now - date;
 
     if (diff < 60000) return 'Just now';
     if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
     if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-    return date.toLocaleDateString();
+    return date ? date.toLocaleString() : 'N/A';
   };
 
   return (
@@ -857,7 +1017,7 @@ const ActivityItem = ({ activity }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.colors.background,
   },
   centerContainer: {
     flex: 1,
@@ -865,40 +1025,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   header: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    paddingTop: 30,
+    display: 'none',
   },
-  headerTop: {
+  contentHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 10,
   },
   houseSelectorButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: theme.colors.card,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
   },
   houseSelectorText: {
     fontSize: 14,
-    color: '#fff',
+    color: theme.colors.primary,
     marginRight: 4,
+    fontWeight: '700',
   },
   filterButton: {
-    padding: 8,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 8,
-    marginLeft: 8,
+    padding: 10,
+    backgroundColor: theme.colors.card,
+    borderRadius: 14,
   },
   
   // Modals
@@ -908,7 +1062,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.card,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     maxHeight: '90%',
@@ -921,12 +1075,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: theme.colors.gray2,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: theme.colors.text,
   },
   
   // House Selector
@@ -937,14 +1091,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: theme.colors.gray2,
   },
   houseOptionSelected: {
-    backgroundColor: '#F0F7F0',
+    backgroundColor: theme.colors.background,
   },
   houseOptionText: {
     fontSize: 16,
-    color: '#333',
+    color: theme.colors.text,
     fontWeight: '500',
   },
   
@@ -959,7 +1113,7 @@ const styles = StyleSheet.create({
   filterLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: theme.colors.text,
     marginBottom: 12,
   },
   filterOption: {
@@ -968,20 +1122,20 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: theme.colors.gray2,
   },
   filterOptionText: {
     fontSize: 14,
-    color: '#333',
+    color: theme.colors.text,
   },
   filterOptionActive: {
-    backgroundColor: '#E8F5E9',
-    borderColor: '#4CAF50',
+    backgroundColor: theme.colors.background,
+    borderColor: theme.colors.primary,
   },
   
   // Chart
   chartContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.card,
     borderRadius: 12,
     padding: 8,
     elevation: 2,
@@ -989,6 +1143,19 @@ const styles = StyleSheet.create({
   },
   chart: {
     borderRadius: 8,
+  },
+  timelineCard: {
+    backgroundColor: theme.colors.card,
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 12,
+    elevation: 2,
+  },
+  timelineTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginBottom: 8,
   },
   
   // Sensor Selector
@@ -1001,34 +1168,46 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#E8E8E8',
+    backgroundColor: theme.colors.background,
     marginRight: 8,
     borderWidth: 1,
-    borderColor: '#D0D0D0',
+    borderColor: theme.colors.gray2,
   },
   sensorTabActive: {
-    backgroundColor: '#2196F3',
-    borderColor: '#2196F3',
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
   },
   sensorTabText: {
     fontSize: 12,
-    color: '#666',
+    color: theme.colors.gray1,
     fontWeight: '500',
   },
   sensorTabTextActive: {
-    color: '#fff',
+    color: theme.colors.card,
   },
   
   // Sections
   section: {
     marginHorizontal: 16,
-    marginVertical: 12,
+    marginVertical: 10,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: theme.colors.text,
     marginBottom: 12,
+  },
+  sectionSubtitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 12,
+  },
+  sectionSubtitle: {
+    flex: 1,
+    fontSize: 12,
+    color: theme.colors.gray1,
   },
   activityHeader: {
     flexDirection: 'row',
@@ -1037,7 +1216,7 @@ const styles = StyleSheet.create({
   },
   filterInfo: {
     fontSize: 12,
-    color: '#999',
+    color: theme.colors.gray2,
     fontStyle: 'italic',
   },
   
@@ -1048,9 +1227,17 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
+  centerStatsGrid: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statsPair: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   statCard: {
     width: '48%',
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.card,
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
@@ -1068,7 +1255,7 @@ const styles = StyleSheet.create({
   },
   statCardTitle: {
     fontSize: 12,
-    color: '#666',
+    color: theme.colors.gray1,
     marginLeft: 6,
     flex: 1,
   },
@@ -1076,10 +1263,36 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
   },
+  switchSummary: {
+    backgroundColor: theme.colors.card,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 12,
+    elevation: 2,
+  },
+  switchSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  switchSummaryLabel: {
+    fontSize: 13,
+    color: theme.colors.gray1,
+    fontWeight: '600',
+    marginRight: 12,
+  },
+  switchSummaryValue: {
+    fontSize: 12,
+    color: theme.colors.text,
+    flex: 1,
+    textAlign: 'right',
+  },
   
   // Status
   statusContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.card,
     borderRadius: 12,
     padding: 16,
     elevation: 2,
@@ -1092,7 +1305,7 @@ const styles = StyleSheet.create({
   },
   statusLabel: {
     fontSize: 14,
-    color: '#666',
+    color: theme.colors.gray1,
     fontWeight: '500',
   },
   statusValue: {
@@ -1101,18 +1314,18 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   progressBar: {
-    backgroundColor: '#E0E0E0',
+    backgroundColor: theme.colors.gray2,
     borderRadius: 4,
     overflow: 'hidden',
   },
   progressFill: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: theme.colors.primary,
     height: 8,
   },
   
   // Activity
   activityItem: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.card,
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
@@ -1126,7 +1339,7 @@ const styles = StyleSheet.create({
   },
   activityTime: {
     fontSize: 12,
-    color: '#999',
+    color: theme.colors.gray2,
   },
   activityMiddle: {
     marginRight: 12,
@@ -1134,8 +1347,8 @@ const styles = StyleSheet.create({
   activityAction: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#4CAF50',
-    backgroundColor: '#E8F5E9',
+    color: theme.colors.primary,
+    backgroundColor: theme.colors.background,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
@@ -1145,12 +1358,12 @@ const styles = StyleSheet.create({
   },
   activityReason: {
     fontSize: 12,
-    color: '#666',
+    color: theme.colors.gray1,
   },
   
   // Device Usage
   usageList: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.card,
     borderRadius: 12,
     overflow: 'hidden',
     elevation: 2,
@@ -1170,12 +1383,12 @@ const styles = StyleSheet.create({
   usageDeviceName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: theme.colors.text,
     marginBottom: 4,
   },
   usageDeviceType: {
     fontSize: 12,
-    color: '#999',
+    color: theme.colors.gray2,
   },
   usageRight: {
     alignItems: 'flex-end',
@@ -1183,22 +1396,22 @@ const styles = StyleSheet.create({
   usageTime: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#666',
+    color: theme.colors.gray1,
     marginBottom: 4,
   },
   usageTimeActive: {
-    color: '#4CAF50',
+    color: theme.colors.primary,
   },
   usageStatus: {
     fontSize: 11,
-    color: '#999',
+    color: theme.colors.gray2,
   },
   statusOn: {
-    color: '#4CAF50',
+    color: theme.colors.primary,
     fontWeight: '600',
   },
   statusOff: {
-    color: '#999',
+    color: theme.colors.gray2,
   },
   
   // Footer
@@ -1209,13 +1422,13 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 12,
-    color: '#999',
+    color: theme.colors.gray2,
     marginBottom: 4,
   },
   
   emptyText: {
     textAlign: 'center',
-    color: '#999',
+    color: theme.colors.gray2,
     fontSize: 14,
     paddingVertical: 20,
   },

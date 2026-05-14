@@ -15,7 +15,9 @@ import {
   TextInput,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import { MaterialIcons } from '@expo/vector-icons';
 import { apiService } from '../../services/api';
+import { theme } from '../../styles/theme';
 
 export default function HouseSharing({ navigation }) {
   const isMounted = useRef(true);
@@ -31,6 +33,21 @@ export default function HouseSharing({ navigation }) {
   const [changeAccessLevelModalVisible, setChangeAccessLevelModalVisible] = useState(false);  // Modal for changing role
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedAccessLevel, setSelectedAccessLevel] = useState('viewer');
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      title: 'House Sharing',
+      headerStyle: {
+        backgroundColor: theme.colors.primary,
+      },
+      headerTintColor: theme.colors.card,
+      headerTitleStyle: {
+        fontWeight: '700',
+        color: theme.colors.card,
+      },
+    });
+  }, [navigation]);
 
   // Load houses and users
   const loadData = async (showLoader = true) => {
@@ -207,7 +224,7 @@ export default function HouseSharing({ navigation }) {
       onPress={() => setSelectedHouse(item)}
     >
       <View style={styles.houseHeader}>
-        <Text style={styles.houseName}>🏠 {item.name}</Text>
+        <Text style={styles.houseName}>{item.name}</Text>
         <Text style={styles.userCount}>
           {selectedHouse?.id === item.id ? `${houseUsers.length} users` : ''}
         </Text>
@@ -225,21 +242,23 @@ export default function HouseSharing({ navigation }) {
       </View>
       <View style={styles.userAccessLevel}>
         <Text style={[styles.accessLevel, { color: getAccessLevelColor(item.access_level) }]}>
-          {getAccessLevelIcon(item.access_level)} {item.access_level.toUpperCase()}
+          {item.access_level.toUpperCase()}
         </Text>
       </View>
       <View style={styles.userActions}>
         <TouchableOpacity
-          style={styles.editRoleBtn}
+          style={styles.iconButton}
           onPress={() => openChangeAccessLevelModal(item)}
+          accessibilityLabel="Edit access level"
         >
-          <Text style={styles.editRoleBtnText}>✎ Edit</Text>
+          <MaterialIcons name="edit" size={18} color={theme.colors.text} />
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.removeBtn}
+          style={styles.iconButtonDanger}
           onPress={() => unshareHouse(item.user_id)}
+          accessibilityLabel="Remove user access"
         >
-          <Text style={styles.removeBtnText}>🗑 Remove</Text>
+          <MaterialIcons name="delete-outline" size={18} color={theme.colors.card} />
         </TouchableOpacity>
       </View>
     </View>
@@ -247,26 +266,22 @@ export default function HouseSharing({ navigation }) {
 
   const getAccessLevelColor = (level) => {
     const colors = {
-      owner: '#e74c3c',
-      manager: '#f39c12',
-      viewer: '#3498db',
+      owner: theme.colors.accent,
+      manager: theme.colors.primary,
+      viewer: theme.colors.primary,
     };
-    return colors[level] || '#7f8c8d';
+    return colors[level] || theme.colors.gray2;
   };
 
   const getAccessLevelIcon = (level) => {
-    const icons = {
-      owner: '👑',
-      manager: '🔧',
-      viewer: '👁️',
-    };
-    return icons[level] || '📋';
+    // UI icons removed; keep labels only
+    return '';
   };
 
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#e74c3c" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={styles.loadingText}>Loading houses...</Text>
       </View>
     );
@@ -290,7 +305,7 @@ export default function HouseSharing({ navigation }) {
       {selectedHouse && (
         <View style={styles.usersPanel}>
           <View style={styles.usersPanelHeader}>
-            <Text style={styles.usersPanelTitle}>Users in "{selectedHouse.house_name}"</Text>
+            <Text style={styles.usersPanelTitle}>{selectedHouse.house_name}</Text>
             <TouchableOpacity
               style={styles.addButton}
               onPress={() => setModalVisible(true)}
@@ -318,8 +333,8 @@ export default function HouseSharing({ navigation }) {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Share House with User</Text>
-              <TouchableOpacity onPress={closeAddUserModal}>
-                <Text style={styles.closeButton}>✕</Text>
+              <TouchableOpacity onPress={closeAddUserModal} accessibilityLabel="Close share modal">
+                <MaterialIcons name="close" size={22} color={theme.colors.gray2} />
               </TouchableOpacity>
             </View>
 
@@ -353,9 +368,9 @@ export default function HouseSharing({ navigation }) {
                   onValueChange={(value) => setSelectedAccessLevel(value)}
                   style={styles.pickerInput}
                 >
-                  <Picker.Item label="👁️ Viewer (Read Only)" value="viewer" />
-                  <Picker.Item label="🔧 Manager (Control)" value="manager" />
-                  <Picker.Item label="👑 Owner (Full Access)" value="owner" />
+                  <Picker.Item label="Viewer (Read Only)" value="viewer" />
+                  <Picker.Item label="Manager (Control)" value="manager" />
+                  <Picker.Item label="Owner (Full Access)" value="owner" />
                 </Picker>
               </View>
 
@@ -370,13 +385,13 @@ export default function HouseSharing({ navigation }) {
             {/* Modal Actions */}
             <View style={styles.modalActions}>
               <TouchableOpacity
-                style={[styles.button, { backgroundColor: '#95a5a6' }]}
+                style={[styles.button, { backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.primary }]}
                 onPress={closeAddUserModal}
               >
-                <Text style={styles.buttonText}>Cancel</Text>
+                <Text style={[styles.buttonText, styles.buttonTextOutline]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.button, { backgroundColor: '#2ecc71' }]}
+                style={[styles.button, { backgroundColor: theme.colors.primary }]}
                 onPress={shareHouse}
               >
                 <Text style={styles.buttonText}>Share</Text>
@@ -392,8 +407,8 @@ export default function HouseSharing({ navigation }) {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Change Access Level</Text>
-              <TouchableOpacity onPress={closeChangeAccessLevelModal}>
-                <Text style={styles.closeButton}>✕</Text>
+              <TouchableOpacity onPress={closeChangeAccessLevelModal} accessibilityLabel="Close edit modal">
+                <MaterialIcons name="close" size={22} color={theme.colors.gray2} />
               </TouchableOpacity>
             </View>
 
@@ -413,9 +428,9 @@ export default function HouseSharing({ navigation }) {
                       onValueChange={(value) => setSelectedAccessLevel(value)}
                       style={styles.pickerInput}
                     >
-                      <Picker.Item label="👁️ Viewer (Read Only)" value="viewer" />
-                      <Picker.Item label="🔧 Manager (Control)" value="manager" />
-                      <Picker.Item label="👑 Owner (Full Access)" value="owner" />
+                      <Picker.Item label="Viewer (Read Only)" value="viewer" />
+                      <Picker.Item label="Manager (Control)" value="manager" />
+                      <Picker.Item label="Owner (Full Access)" value="owner" />
                     </Picker>
                   </View>
 
@@ -431,13 +446,13 @@ export default function HouseSharing({ navigation }) {
             {/* Modal Actions */}
             <View style={styles.modalActions}>
               <TouchableOpacity
-                style={[styles.button, { backgroundColor: '#95a5a6' }]}
+                style={[styles.button, { backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.primary }]}
                 onPress={closeChangeAccessLevelModal}
               >
-                <Text style={styles.buttonText}>Cancel</Text>
+                <Text style={[styles.buttonText, styles.buttonTextOutline]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.button, { backgroundColor: '#3498db' }]}
+                style={[styles.button, { backgroundColor: theme.colors.primary }]}
                 onPress={changeAccessLevel}
               >
                 <Text style={styles.buttonText}>Update</Text>
@@ -453,7 +468,7 @@ export default function HouseSharing({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ecf0f1',
+    backgroundColor: theme.colors.background,
   },
   centerContainer: {
     flex: 1,
@@ -463,12 +478,12 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#7f8c8d',
+    color: theme.colors.gray1,
   },
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#2c3e50',
+    color: theme.colors.text,
     paddingHorizontal: 12,
     paddingTop: 12,
     marginBottom: 8,
@@ -478,17 +493,17 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   houseCard: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.card,
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
     borderLeftWidth: 4,
-    borderLeftColor: '#9b59b6',
+    borderLeftColor: theme.colors.primary,
     elevation: 2,
   },
   houseCardSelected: {
-    backgroundColor: '#e8f8f5',
-    borderLeftColor: '#2ecc71',
+    backgroundColor: theme.colors.background,
+    borderLeftColor: theme.colors.primary,
   },
   houseHeader: {
     flexDirection: 'row',
@@ -499,25 +514,25 @@ const styles = StyleSheet.create({
   houseName: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#2c3e50',
+    color: theme.colors.text,
   },
   userCount: {
-    backgroundColor: '#ecf0f1',
+    backgroundColor: theme.colors.background,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
     fontSize: 12,
-    color: '#7f8c8d',
+    color: theme.colors.gray1,
   },
   houseLocation: {
     fontSize: 12,
-    color: '#95a5a6',
+    color: theme.colors.gray2,
   },
   usersPanel: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.card,
     height: '40%',
     borderTopWidth: 1,
-    borderTopColor: '#bdc3c7',
+    borderTopColor: theme.colors.gray2,
   },
   usersPanelHeader: {
     flexDirection: 'row',
@@ -526,21 +541,21 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#ecf0f1',
+    borderBottomColor: theme.colors.gray2,
   },
   usersPanelTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#2c3e50',
+    color: theme.colors.text,
   },
   addButton: {
-    backgroundColor: '#2ecc71',
+    backgroundColor: theme.colors.primary,
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 6,
   },
   addButtonText: {
-    color: '#fff',
+    color: theme.colors.card,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -549,7 +564,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   userCard: {
-    backgroundColor: '#f9f9f9',
+    backgroundColor: theme.colors.card,
     borderRadius: 6,
     padding: 10,
     marginVertical: 6,
@@ -557,7 +572,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderLeftWidth: 3,
-    borderLeftColor: '#3498db',
+    borderLeftColor: theme.colors.primary,
   },
   userInfo: {
     flex: 1,
@@ -565,11 +580,11 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#2c3e50',
+    color: theme.colors.text,
   },
   userEmail: {
     fontSize: 11,
-    color: '#95a5a6',
+    color: theme.colors.gray2,
     marginTop: 2,
   },
   userAccessLevel: {
@@ -583,30 +598,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 6,
   },
-  editRoleBtn: {
-    backgroundColor: '#3498db',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 4,
+  iconButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: theme.colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  editRoleBtnText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  removeBtn: {
-    backgroundColor: '#e74c3c',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 4,
-  },
-  removeBtnText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '600',
+  iconButtonDanger: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: theme.colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   userInfoSection: {
-    backgroundColor: '#ecf0f1',
+    backgroundColor: theme.colors.background,
     padding: 12,
     borderRadius: 6,
     marginBottom: 16,
@@ -614,32 +623,32 @@ const styles = StyleSheet.create({
   userInfoLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#7f8c8d',
+    color: theme.colors.gray1,
     marginBottom: 4,
   },
   userInfoValue: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#2c3e50',
+    color: theme.colors.text,
   },
   userInfoEmail: {
     fontSize: 12,
-    color: '#95a5a6',
+    color: theme.colors.gray2,
     marginTop: 2,
   },
   emptyText: {
     textAlign: 'center',
-    color: '#95a5a6',
+    color: theme.colors.gray2,
     fontSize: 12,
     marginTop: 24,
   },
   modalContainer: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(17,24,39,0.5)',
   },
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.card,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     paddingTop: 16,
@@ -652,16 +661,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#ecf0f1',
+    borderBottomColor: theme.colors.gray2,
   },
   modalTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: theme.colors.text,
   },
   closeButton: {
     fontSize: 24,
-    color: '#95a5a6',
+    color: theme.colors.gray2,
   },
   modalBody: {
     paddingHorizontal: 16,
@@ -670,12 +679,12 @@ const styles = StyleSheet.create({
   pickerLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#2c3e50',
+    color: theme.colors.text,
     marginBottom: 8,
   },
   picker: {
     borderWidth: 1,
-    borderColor: '#bdc3c7',
+    borderColor: theme.colors.gray2,
     borderRadius: 6,
     marginBottom: 16,
   },
@@ -684,9 +693,9 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 12,
-    color: '#7f8c8d',
+    color: theme.colors.gray1,
     lineHeight: 18,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: theme.colors.background,
     padding: 12,
     borderRadius: 6,
     marginBottom: 16,
@@ -697,7 +706,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: '#ecf0f1',
+    borderTopColor: theme.colors.gray2,
   },
   button: {
     flex: 1,
@@ -707,8 +716,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   buttonText: {
-    color: '#fff',
+    color: theme.colors.card,
     fontSize: 14,
     fontWeight: '600',
+  },
+  buttonTextOutline: {
+    color: theme.colors.primary,
   },
 });

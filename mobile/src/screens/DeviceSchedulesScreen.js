@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import apiService from '../services/api';
-import theme from '../styles/theme';
+import { theme } from '../styles/theme';
 
 const DeviceSchedulesScreen = ({ navigation }) => {
   const route = useRoute();
@@ -33,21 +33,6 @@ const DeviceSchedulesScreen = ({ navigation }) => {
   });
 
   const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-  useEffect(() => {
-    navigation.setOptions({
-      headerShown: true,
-      title: 'Schedules',
-      headerStyle: {
-        backgroundColor: theme.colors.primary,
-      },
-      headerTintColor: theme.colors.card,
-      headerTitleStyle: {
-        fontWeight: '700',
-        color: theme.colors.card,
-      },
-    });
-  }, [navigation]);
 
   // Load schedules
   useEffect(() => {
@@ -192,27 +177,31 @@ const DeviceSchedulesScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.contentHeader}>
-        <Text style={styles.sectionTitle} numberOfLines={1}>{device?.device_name || 'Device'}</Text>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => {
-            setEditingSchedule(null);
-            setFormData({
-              scheduled_time: '08:00',
-              action_status: 'on',
-              action_level: 75,
-              duration_minutes: 0,
-              days_of_week: '0,1,2,3,4,5,6',
-              is_active: true,
-            });
-            setModalVisible(true);
-          }}
-          activeOpacity={0.86}
-        >
-          <Text style={styles.addButtonText}>Add</Text>
-        </TouchableOpacity>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>
+          Schedules for {device?.device_name}
+        </Text>
       </View>
+
+      {/* Add Schedule Button */}
+      <TouchableOpacity
+        style={styles.addButton}
+        onPress={() => {
+          setEditingSchedule(null);
+          setFormData({
+            scheduled_time: '08:00',
+            action_status: 'on',
+            action_level: 75,
+            duration_minutes: 0,
+            days_of_week: '0,1,2,3,4,5,6',
+            is_active: true,
+          });
+          setModalVisible(true);
+        }}
+      >
+        <Text style={styles.addButtonText}>Add Schedule</Text>
+      </TouchableOpacity>
 
       {/* Schedules List */}
       {loading ? (
@@ -530,21 +519,31 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
+  header: {
+    backgroundColor: theme.colors.primary,
+    padding: 15,
+    paddingTop: 20,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: theme.colors.card,
+  },
   addButton: {
     backgroundColor: theme.colors.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
+    margin: 12,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
   },
   addButtonText: {
     color: theme.colors.card,
-    fontWeight: '700',
+    fontWeight: 'bold',
     fontSize: 14,
   },
   schedulesList: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingBottom: 20,
+    paddingHorizontal: 12,
   },
   scheduleCard: {
     backgroundColor: theme.colors.card,
@@ -575,13 +574,13 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   statusOn: {
-    backgroundColor: theme.colors.accent,
-  },
-  statusOff: {
     backgroundColor: theme.colors.primary,
   },
+  statusOff: {
+    backgroundColor: theme.colors.accent,
+  },
   statusText: {
-    color: 'white',
+    color: theme.colors.card,
     fontSize: 12,
     fontWeight: 'bold',
   },
@@ -609,14 +608,14 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
   },
   dayInactive: {
-    backgroundColor: theme.colors.gray2,
+    backgroundColor: theme.colors.background,
   },
   dayText: {
     fontSize: 11,
     fontWeight: '600',
   },
   dayTextActive: {
-    color: theme.colors.card,
+    color: 'white',
   },
   dayTextInactive: {
     color: theme.colors.gray2,
@@ -627,10 +626,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   activeYes: {
-    color: theme.colors.accent,
+    color: theme.colors.primary,
   },
   activeNo: {
-    color: theme.colors.primary,
+    color: theme.colors.accent,
   },
   actions: {
     flexDirection: 'row',
@@ -678,13 +677,13 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(17,24,39,0.5)',
     justifyContent: 'flex-end',
   },
   modalContent: {
     backgroundColor: theme.colors.card,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     maxHeight: '90%',
   },
   modalHeader: {
@@ -764,7 +763,7 @@ const styles = StyleSheet.create({
     color: theme.colors.gray1,
   },
   segmentTextActive: {
-    color: theme.colors.card,
+    color: 'white',
   },
   levelInputGroup: {
     flexDirection: 'row',
@@ -833,19 +832,19 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     marginRight: 8,
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.card,
     borderRadius: 6,
     alignItems: 'center',
   },
   cancelButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.gray1,
+    color: theme.colors.primary,
   },
   saveButton: {
     flex: 1,
     paddingVertical: 12,
-    backgroundColor: theme.colors.accent,
+    backgroundColor: theme.colors.primary,
     borderRadius: 6,
     alignItems: 'center',
   },

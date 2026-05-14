@@ -16,9 +16,12 @@ import {
   Switch,
   ActivityIndicator,
   RefreshControl,
+  Modal,
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { apiService } from '../services/api';
+import { theme } from '../styles/theme';
 
 const SENSOR_TYPES = ['temperature', 'humidity', 'light', 'motion', 'co2', 'pressure'];
 const OPERATORS = ['>', '<', '>=', '<=', '==', '!='];
@@ -33,6 +36,7 @@ const AutomationRulesScreen = ({ route, navigation }) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingRule, setEditingRule] = useState(null);
   const [devices, setDevices] = useState([]);
+  const [editingRuleId, setEditingRuleId] = useState(null);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -43,6 +47,21 @@ const AutomationRulesScreen = ({ route, navigation }) => {
     action_level: '60',
     conditions: [{ sensor_type: 'temperature', operator: '>', threshold_value: '30' }]
   });
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      title: 'Automation',
+      headerStyle: {
+        backgroundColor: theme.colors.primary,
+      },
+      headerTintColor: theme.colors.card,
+      headerTitleStyle: {
+        fontWeight: '700',
+        color: theme.colors.card,
+      },
+    });
+  }, [navigation]);
 
   // Fetch rules and devices
   useEffect(() => {
@@ -109,7 +128,7 @@ const AutomationRulesScreen = ({ route, navigation }) => {
       const MAX_CONDITIONS = 5;
       const currentConditions = formData.conditions || [];
       if (currentConditions.length >= MAX_CONDITIONS) {
-        Alert.alert('⚠️ Limit Reached', `Maximum ${MAX_CONDITIONS} conditions allowed`);
+        Alert.alert('Limit Reached', `Maximum ${MAX_CONDITIONS} conditions allowed`);
         return;
       }
       console.log('➕ Adding new condition');
@@ -164,18 +183,18 @@ const AutomationRulesScreen = ({ route, navigation }) => {
       console.log('📝 Form data before validation:', formData);
       
       if (!formData.rule_name?.trim()) {
-        Alert.alert('Error', '❌ Rule name is required');
+        Alert.alert('Error', 'Rule name is required');
         return;
       }
 
       if (!formData.action_device_id || formData.action_device_id === '') {
         console.warn('❌ action_device_id:', formData.action_device_id);
-        Alert.alert('Error', '❌ Please select an action device');
+        Alert.alert('Error', 'Please select an action device');
         return;
       }
 
       if (formData.conditions.length === 0) {
-        Alert.alert('Error', '❌ Please add at least one condition');
+        Alert.alert('Error', 'Please add at least one condition');
         return;
       }
 
@@ -183,62 +202,61 @@ const AutomationRulesScreen = ({ route, navigation }) => {
       for (let i = 0; i < formData.conditions.length; i++) {
         const cond = formData.conditions[i];
         if (!cond.sensor_type || !cond.operator || cond.threshold_value === '' || cond.threshold_value === null) {
-          Alert.alert('Error', `❌ Condition ${i + 1} is incomplete`);
+          Alert.alert('Error', `Condition ${i + 1} is incomplete`);
           return;
         }
       }
 
       if (formData.action_status === 'on' && (!formData.action_level || formData.action_level === '')) {
-        Alert.alert('Error', '❌ Please enter action level (0-100)');
+        Alert.alert('Error', 'Please enter action level (0-100)');
         return;
       }
 
       const actionDeviceId = parseInt(formData.action_device_id);
       if (isNaN(actionDeviceId)) {
         console.error('❌ Invalid device ID:', formData.action_device_id);
-        Alert.alert('Error', '❌ Invalid device selection');
+        Alert.alert('Error', 'Invalid device selection');
         return;
       }
 
-      console.log('📤 Creating rule with data:', {
+      const payload = {
         rule_name: formData.rule_name,
         logic_type: formData.logic_type,
         action_device_id: actionDeviceId,
         action_status: formData.action_status,
         action_level: parseInt(formData.action_level || 0),
         conditions: formData.conditions
-      });
+      };
+
+      console.log(editingRuleId ? '📤 Updating rule with data:' : '📤 Creating rule with data:', payload);
 
       let response;
       try {
-        response = await apiService.post(
-          `/rooms/${roomId}/automation-rules`,
-          {
-            rule_name: formData.rule_name,
-            logic_type: formData.logic_type,
-            action_device_id: actionDeviceId,
-            action_status: formData.action_status,
-            action_level: parseInt(formData.action_level || 0),
-            conditions: formData.conditions.map(c => ({
-              sensor_type: c.sensor_type,
-              operator: c.operator,
-              threshold_value: parseFloat(c.threshold_value)
-            }))
-          }
-        );
+        const normalizedPayload = {
+          ...payload,
+          conditions: payload.conditions.map(c => ({
+            sensor_type: c.sensor_type,
+            operator: c.operator,
+            threshold_value: parseFloat(c.threshold_value)
+          }))
+        };
+
+        response = editingRuleId
+          ? await apiService.put(`/automation-rules/${editingRuleId}`, normalizedPayload)
+          : await apiService.post(`/rooms/${roomId}/automation-rules`, normalizedPayload);
       } catch (apiError) {
-        console.error('❌ API Error creating rule:', apiError);
+        console.error('❌ API Error saving rule:', apiError);
         const errorMsg = apiError?.response?.data?.error || 
                          apiError?.message || 
-                         'Failed to create rule on server';
+                         'Failed to save rule on server';
         Alert.alert('Server Error', errorMsg);
         return;
       }
 
-      console.log('📥 Response:', response);
+      console.log('Response:', response);
 
       if (response && response.success) {
-        Alert.alert('Success', '✅ Rule created successfully');
+        Alert.alert('Success', editingRuleId ? 'Rule updated successfully' : 'Rule created successfully');
         setShowAddForm(false);
         resetForm();
         // Reload data safely
@@ -249,14 +267,35 @@ const AutomationRulesScreen = ({ route, navigation }) => {
           // Still show success, just warn about reload error
         }
       } else {
-        const errorMsg = response?.error || response?.message || 'Failed to create rule';
+        const errorMsg = response?.error || response?.message || 'Failed to save rule';
         Alert.alert('Error', errorMsg);
       }
     } catch (error) {
-      console.error('❌ Unexpected error creating rule:', error);
+      console.error('❌ Unexpected error saving rule:', error);
       const errorMsg = error?.message || 'An unexpected error occurred';
       Alert.alert('Error', errorMsg);
     }
+  };
+
+  const handleEditRule = (rule) => {
+    if (!rule) return;
+
+    setEditingRuleId(rule.rule_id);
+    setFormData({
+      rule_name: rule.rule_name || '',
+      logic_type: rule.logic_type || 'AND',
+      action_device_id: rule.action_device_id ? String(rule.action_device_id) : '',
+      action_status: rule.action_status || 'on',
+      action_level: String(rule.action_level ?? 60),
+      conditions: Array.isArray(rule.conditions) && rule.conditions.length > 0
+        ? rule.conditions.map((cond) => ({
+            sensor_type: cond.sensor_type || 'temperature',
+            operator: cond.operator || '>',
+            threshold_value: String(cond.threshold_value ?? '30'),
+          }))
+        : [{ sensor_type: 'temperature', operator: '>', threshold_value: '30' }],
+    });
+    setShowAddForm(true);
   };
 
   const handleToggleRule = async (ruleId, currentStatus) => {
@@ -278,7 +317,7 @@ const AutomationRulesScreen = ({ route, navigation }) => {
         const conditionMet = response.conditions_met;
         Alert.alert(
           'Test Result',
-          `Rule: ${response.rule_name}\n\nConditions Met: ${conditionMet ? '✅ YES' : '❌ NO'}\n\nLogic Type: ${response.logic_type}`,
+          `Rule: ${response.rule_name}\n\nConditions Met: ${conditionMet ? 'Yes' : 'No'}\n\nLogic Type: ${response.logic_type}`,
           [{ text: 'OK' }]
         );
       }
@@ -321,9 +360,8 @@ const AutomationRulesScreen = ({ route, navigation }) => {
       action_level: '60',
       conditions: [{ sensor_type: 'temperature', operator: '>', threshold_value: '30' }]
     });
-    setEditingRule(null);
+    setEditingRuleId(null);
   };
-
   const RuleCard = ({ rule }) => {
     try {
       // Fallback support for both API response formats
@@ -341,10 +379,19 @@ const AutomationRulesScreen = ({ route, navigation }) => {
         <View style={[styles.ruleCard, !(rule?.is_active ?? true) && styles.ruleCardDisabled]}>
           <View style={styles.ruleHeader}>
           <Text style={styles.ruleName}>{rule?.rule_name || 'Unnamed Rule'}</Text>
-          <Switch
-            value={rule?.is_active ?? true}
-            onValueChange={() => handleToggleRule(rule.rule_id, rule.is_active)}
-          />
+          <View style={styles.ruleHeaderActions}>
+            <TouchableOpacity
+              style={styles.editIconButton}
+              onPress={() => handleEditRule(rule)}
+              accessibilityLabel="Edit rule"
+            >
+              <MaterialIcons name="edit" size={18} color={theme.colors.gray1} />
+            </TouchableOpacity>
+            <Switch
+              value={rule?.is_active ?? true}
+              onValueChange={() => handleToggleRule(rule.rule_id, rule.is_active)}
+            />
+          </View>
         </View>
 
         {/* Conditions */}
@@ -363,7 +410,7 @@ const AutomationRulesScreen = ({ route, navigation }) => {
         <View style={styles.actionSection}>
           <Text style={styles.sectionLabel}>Action:</Text>
           <Text style={styles.actionText}>
-            🎯 Turn {rule.action_device_id ? `${actionDevice?.device_name || actionDevice?.name || 'Device'}` : 'Device'} {(rule.action_status || 'unknown').toUpperCase()}
+            Turn {rule.action_device_id ? `${actionDevice?.device_name || actionDevice?.name || 'Device'}` : 'Device'} {(rule.action_status || 'unknown').toUpperCase()}
             {rule.action_status === 'on' && ` (Level: ${rule.action_level}%)`}
           </Text>
         </View>
@@ -374,13 +421,13 @@ const AutomationRulesScreen = ({ route, navigation }) => {
             style={[styles.button, styles.testButton]}
             onPress={() => handleTestRule(rule.rule_id)}
           >
-            <Text style={styles.buttonText}>🧪 Test</Text>
+            <Text style={styles.buttonText}>Test</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.button, styles.deleteButton]}
             onPress={() => handleDeleteRule(rule.rule_id, rule.rule_name)}
           >
-            <Text style={styles.buttonText}>🗑️ Delete</Text>
+            <Text style={styles.buttonText}>Delete</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -449,7 +496,7 @@ const AutomationRulesScreen = ({ route, navigation }) => {
             style={styles.removeButton}
             onPress={() => removeCondition(index)}
           >
-            <Text style={styles.removeButtonText}>✕</Text>
+            <Text style={styles.removeButtonText}>×</Text>
           </TouchableOpacity>
         </View>
       );
@@ -466,13 +513,28 @@ const AutomationRulesScreen = ({ route, navigation }) => {
   if (loading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      <View style={styles.contentHeader}>
+        <Text style={styles.sectionTitle} numberOfLines={1}>{roomName || 'Automation'}</Text>
+        <TouchableOpacity
+          style={styles.addBtn}
+          onPress={() => {
+            setShowAddForm(true);
+          }}
+          activeOpacity={0.86}
+          disabled={showAddForm}
+        >
+          <MaterialIcons name="add" size={20} color={theme.colors.card} />
+          <Text style={styles.addBtnText}>Add</Text>
+        </TouchableOpacity>
+      </View>
+
       <FlatList
         data={rules}
         renderItem={({ item }) => <RuleCard rule={item} />}
@@ -486,12 +548,29 @@ const AutomationRulesScreen = ({ route, navigation }) => {
             <Text style={styles.emptySubtext}>Tap the + button to create one</Text>
           </View>
         }
-        ListFooterComponent={
-          showAddForm ? (
-            <ScrollView style={styles.formContainer}>
-              <Text style={styles.formTitle}>Create New Rule</Text>
+      />
 
-              {/* Rule Name */}
+      <Modal visible={showAddForm} transparent animationType="slide" onRequestClose={() => {
+        setShowAddForm(false);
+        resetForm();
+      }}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingRuleId ? 'Edit Rule' : 'Create New Rule'}</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => {
+                  setShowAddForm(false);
+                  resetForm();
+                }}
+              >
+                <MaterialIcons name="close" size={22} color={theme.colors.gray1} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.formContainer} contentContainerStyle={styles.formScrollContent}>
               <Text style={styles.label}>Rule Name</Text>
               <TextInput
                 style={styles.input}
@@ -503,20 +582,15 @@ const AutomationRulesScreen = ({ route, navigation }) => {
                 }}
               />
 
-              {/* Conditions */}
               <Text style={styles.label}>Conditions ({formData.logic_type})</Text>
               {(formData.conditions || []).map((cond, idx) => (
                 <ConditionInput key={`cond-${idx}`} index={idx} condition={cond} />
               ))}
 
-              <TouchableOpacity
-                style={styles.addConditionButton}
-                onPress={addCondition}
-              >
+              <TouchableOpacity style={styles.addConditionButton} onPress={addCondition}>
                 <Text style={styles.addConditionText}>+ Add Condition</Text>
               </TouchableOpacity>
 
-              {/* Logic Type */}
               <Text style={styles.label}>Logic Type</Text>
               <Picker
                 selectedValue={formData.logic_type}
@@ -528,7 +602,6 @@ const AutomationRulesScreen = ({ route, navigation }) => {
                 ))}
               </Picker>
 
-              {/* Action Device */}
               <Text style={styles.label}>Action Device</Text>
               <Picker
                 selectedValue={formData.action_device_id}
@@ -541,10 +614,8 @@ const AutomationRulesScreen = ({ route, navigation }) => {
                 <Picker.Item label="Select a device..." value="" />
                 {devices.length > 0 ? (
                   devices.map(device => {
-                    // Fallback to support both API response formats
                     const deviceId = device?.device_id || device?.id;
                     const deviceName = device?.device_name || device?.name || `Device ${deviceId}`;
-                    console.log('🎯 Device option:', { device_id: deviceId, device_name: deviceName, device });
                     return (
                       <Picker.Item
                         key={deviceId}
@@ -558,7 +629,6 @@ const AutomationRulesScreen = ({ route, navigation }) => {
                 )}
               </Picker>
 
-              {/* Action Status */}
               <Text style={styles.label}>Action Status</Text>
               <Picker
                 selectedValue={formData.action_status}
@@ -569,7 +639,6 @@ const AutomationRulesScreen = ({ route, navigation }) => {
                 <Picker.Item label="Turn OFF" value="off" />
               </Picker>
 
-              {/* Action Level */}
               {formData.action_status === 'on' && (
                 <>
                   <Text style={styles.label}>Device Level (0-100%)</Text>
@@ -586,36 +655,27 @@ const AutomationRulesScreen = ({ route, navigation }) => {
                 </>
               )}
 
-              {/* Form Buttons */}
-              <TouchableOpacity
-                style={[styles.button, styles.createButton]}
-                onPress={handleCreateRule}
-              >
-                <Text style={styles.buttonText}>✓ Create Rule</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.button, styles.cancelButton]}
-                onPress={() => {
-                  setShowAddForm(false);
-                  resetForm();
-                }}
-              >
-                <Text style={styles.buttonText}>Cancel</Text>
-              </TouchableOpacity>
+              <View style={styles.modalButtonRow}>
+                <TouchableOpacity
+                  style={[styles.button, styles.cancelButton]}
+                  onPress={() => {
+                    setShowAddForm(false);
+                    resetForm();
+                  }}
+                >
+                  <Text style={[styles.buttonText, styles.cancelButtonText]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.button, styles.createButton]}
+                  onPress={handleCreateRule}
+                >
+                  <Text style={styles.buttonText}>{editingRuleId ? 'Save Changes' : 'Create Rule'}</Text>
+                </TouchableOpacity>
+              </View>
             </ScrollView>
-          ) : null
-        }
-      />
-
-      {!showAddForm && (
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() => setShowAddForm(true)}
-        >
-          <Text style={styles.fabText}>+</Text>
-        </TouchableOpacity>
-      )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -623,7 +683,37 @@ const AutomationRulesScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.colors.background,
+  },
+  contentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
+  sectionTitle: {
+    color: theme.colors.primary,
+    fontSize: 22,
+    fontWeight: '700',
+    flex: 1,
+    minWidth: 0,
+    marginRight: 12,
+  },
+  addBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
+  },
+  addBtnText: {
+    color: theme.colors.card,
+    fontSize: 14,
+    fontWeight: '700',
   },
   emptyContainer: {
     flex: 1,
@@ -633,30 +723,28 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: '#999',
+    color: theme.colors.gray1,
     fontWeight: '600',
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#ccc',
+    color: theme.colors.gray2,
     marginTop: 8,
   },
   ruleCard: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    margin: 12,
-    padding: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#007AFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: theme.colors.card,
+    borderRadius: 22,
+    marginHorizontal: 20,
+    marginBottom: 14,
+    padding: 18,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    elevation: 2,
   },
   ruleCardDisabled: {
     opacity: 0.6,
-    borderLeftColor: '#ccc',
   },
   ruleHeader: {
     flexDirection: 'row',
@@ -664,28 +752,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
+  ruleHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  editIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: theme.colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   ruleName: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '700',
-    color: '#333',
+    color: theme.colors.primary,
     flex: 1,
   },
   conditionsSection: {
     marginBottom: 12,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: theme.colors.gray2,
   },
   sectionLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#666',
+    color: theme.colors.gray1,
     textTransform: 'uppercase',
     marginBottom: 6,
   },
   conditionText: {
     fontSize: 14,
-    color: '#555',
+    color: theme.colors.gray1,
     marginLeft: 8,
     marginBottom: 4,
   },
@@ -693,11 +794,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: theme.colors.gray2,
   },
   actionText: {
     fontSize: 14,
-    color: '#007AFF',
+    color: theme.colors.primary,
     fontWeight: '600',
     marginLeft: 8,
   },
@@ -708,120 +809,145 @@ const styles = StyleSheet.create({
   button: {
     flex: 1,
     paddingVertical: 10,
-    borderRadius: 6,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   testButton: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: theme.colors.primary,
   },
   deleteButton: {
-    backgroundColor: '#fee',
+    backgroundColor: theme.colors.accent,
   },
   buttonText: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: '700',
+    color: theme.colors.card,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 24, 39, 0.58)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: theme.colors.card,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: '88%',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  modalHandle: {
+    width: 42,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: theme.colors.gray2,
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: theme.colors.primary,
+    flex: 1,
+  },
+  closeButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    backgroundColor: theme.colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  formScrollContent: {
+    paddingBottom: 24,
   },
   formContainer: {
-    backgroundColor: '#fff',
-    margin: 12,
-    padding: 16,
-    borderRadius: 10,
-    marginBottom: 80,
-  },
-  formTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 16,
+    backgroundColor: theme.colors.card,
+    paddingBottom: 8,
   },
   label: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#666',
+    color: theme.colors.gray1,
     marginTop: 12,
     marginBottom: 6,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
+    borderColor: theme.colors.gray2,
+    borderRadius: 14,
     padding: 10,
     marginBottom: 8,
     fontSize: 14,
   },
   picker: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
+    borderColor: theme.colors.gray2,
+    borderRadius: 14,
     marginBottom: 8,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: theme.colors.background,
   },
   conditionInput: {
-    backgroundColor: '#f9f9f9',
-    borderRadius: 6,
+    backgroundColor: theme.colors.background,
+    borderRadius: 14,
     padding: 8,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: theme.colors.gray2,
     gap: 4,
   },
   removeButton: {
     padding: 8,
-    backgroundColor: '#fee',
-    borderRadius: 4,
+    backgroundColor: theme.colors.card,
+    borderRadius: 12,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
   },
   removeButtonText: {
-    color: '#d32f2f',
+    color: theme.colors.primary,
     fontWeight: 'bold',
     fontSize: 16,
   },
   addConditionButton: {
     paddingVertical: 10,
     paddingHorizontal: 12,
-    backgroundColor: '#f0f8ff',
-    borderRadius: 6,
+    backgroundColor: theme.colors.card,
+    borderRadius: 14,
     alignItems: 'center',
     marginVertical: 12,
     borderWidth: 1,
-    borderColor: '#007AFF',
-    borderStyle: 'dashed',
+    borderColor: theme.colors.primary,
   },
   addConditionText: {
-    color: '#007AFF',
+    color: theme.colors.primary,
     fontWeight: '600',
     fontSize: 13,
   },
+  modalButtonRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 18,
+  },
   createButton: {
-    backgroundColor: '#007AFF',
-    marginTop: 16,
+    backgroundColor: theme.colors.primary,
+    marginTop: 0,
   },
   cancelButton: {
-    backgroundColor: '#f0f0f0',
-    marginBottom: 16,
+    backgroundColor: theme.colors.card,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    marginBottom: 0,
   },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  fabText: {
-    fontSize: 28,
-    color: '#fff',
-    fontWeight: '600',
+  cancelButtonText: {
+    color: theme.colors.primary,
   },
 });
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   PanResponder,
@@ -6,33 +6,51 @@ import {
   Text,
   StyleSheet,
 } from 'react-native';
+import { theme } from '../styles/theme';
 
 const CustomSlider = ({ min = 0, max = 100, value = 0, onChange, style }) => {
   const [sliderValue, setSliderValue] = useState(value);
-  const pan = useRef(new Animated.ValueXY()).current;
-  const sliderWidth = useRef(300);
+  const sliderLayout = useRef({ width: 0, x: 0 });
+  const panStartValue = useRef(0);
+
+  // Sync external value changes
+  useEffect(() => {
+    setSliderValue(value);
+  }, [value]);
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {},
+      onPanResponderGrant: (event, { dx }) => {
+        panStartValue.current = sliderValue;
+      },
       onPanResponderMove: (event, { dx }) => {
-        const newValue = Math.max(
-          min,
-          Math.min(max, Math.round((dx / sliderWidth.current) * (max - min) + min))
-        );
-        setSliderValue(newValue);
-        onChange?.(newValue);
+        if (sliderLayout.current.width > 0) {
+          const ratio = dx / sliderLayout.current.width;
+          const newValue = Math.max(
+            min,
+            Math.min(max, Math.round(panStartValue.current + ratio * (max - min)))
+          );
+          setSliderValue(newValue);
+          onChange?.(newValue);
+        }
       },
     })
   ).current;
+
+  const handleLayout = (e) => {
+    sliderLayout.current = {
+      width: e.nativeEvent.layout.width,
+      x: e.nativeEvent.layout.x,
+    };
+  };
 
   const percentage = ((sliderValue - min) / (max - min)) * 100;
 
   return (
     <View style={[styles.container, style]}>
-      <View style={styles.sliderContainer}>
+      <View style={styles.sliderContainer} onLayout={handleLayout}>
         <View style={styles.track}>
           <View
             style={[
@@ -54,15 +72,14 @@ const CustomSlider = ({ min = 0, max = 100, value = 0, onChange, style }) => {
           {...panResponder.panHandlers}
         />
       </View>
-      <Text style={styles.value}>{sliderValue}</Text>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    alignItems: 'center',
-    marginVertical: 10,
+    width: '100%',
+    marginVertical: 8,
   },
   sliderContainer: {
     width: '100%',
@@ -72,27 +89,27 @@ const styles = StyleSheet.create({
   },
   track: {
     height: 4,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: theme.colors.gray1,
     borderRadius: 2,
     width: '100%',
   },
   fill: {
     height: '100%',
-    backgroundColor: '#4CAF50',
+    backgroundColor: theme.colors.accent,
     borderRadius: 2,
   },
   thumb: {
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#4CAF50',
+    backgroundColor: theme.colors.accent,
     position: 'absolute',
     top: 10,
   },
   value: {
     marginTop: 8,
     fontSize: 14,
-    color: '#666',
+    color: theme.colors.gray1,
     fontWeight: '500',
   },
 });

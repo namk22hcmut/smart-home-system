@@ -11,8 +11,10 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { apiService } from '../services/api';
 import { AuthContext } from '../context/AuthContext';
+import { theme } from '../styles/theme';
 
 export default function AdminPanel({ navigation }) {
   const [stats, setStats] = useState(null);
@@ -42,6 +44,26 @@ export default function AdminPanel({ navigation }) {
     }
   }, []);
 
+  useEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      title: 'Admin',
+      headerStyle: {
+        backgroundColor: theme.colors.primary,
+      },
+      headerTintColor: theme.colors.card,
+      headerTitleStyle: {
+        fontWeight: '700',
+        color: theme.colors.card,
+      },
+      headerRight: () => (
+        <TouchableOpacity style={styles.headerLogoutButton} onPress={handleLogout}>
+          <Text style={styles.headerLogoutText}>Logout</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, user]);
+
   const handleLogout = async () => {
     console.log('🚪 Admin logout initiated');
     await signOut();
@@ -52,64 +74,60 @@ export default function AdminPanel({ navigation }) {
       id: 'users',
       title: 'User Management',
       description: 'Create, disable, enable users',
-      icon: '👥',
-      color: '#3498db',
+      icon: 'Users',
+      color: theme.colors.primary,
       action: () => navigation.navigate('UserManagement'),
     },
     {
       id: 'sharing',
       title: 'House Sharing',
       description: 'Manage house access & permissions',
-      icon: '🏠',
-      color: '#e74c3c',
+      icon: 'House',
+      color: theme.colors.primary,
       action: () => navigation.navigate('HouseSharing'),
     },
     {
       id: 'activity',
       title: 'Activity Logs',
       description: 'View system audit trail',
-      icon: '📋',
-      color: '#2ecc71',
+      icon: 'Logs',
+      color: theme.colors.primary,
       action: () => navigation.navigate('ActivityLogs'),
     },
     {
       id: 'stats',
       title: 'System Statistics',
       description: 'View analytics & metrics',
-      icon: '📊',
-      color: '#f39c12',
+      icon: 'Stats',
+      color: theme.colors.primary,
       action: () => navigation.navigate('SystemStats'),
     },
   ];
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Admin Header */}
-      <View style={styles.header}>
-        <Text style={styles.welcomeText}>Admin Panel</Text>
+      <View style={styles.contentHeader}>
+        <Text style={styles.sectionTitle}>Admin Panel</Text>
         <Text style={styles.adminName}>{user?.full_name || user?.username}</Text>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutText}>🚪 Logout</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Stats Overview */}
       {!loading && stats ? (
         <View style={styles.statsContainer}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 16 }}>
-            <StatCard label="Users" value={stats.total_users} icon="👤" />
-            <StatCard label="Admins" value={stats.admin_users} icon="🔑" />
-            <StatCard label="Houses" value={stats.total_houses} icon="🏠" />
+            <StatCard label="Users" value={stats.total_users} iconName="group" />
+            <StatCard label="Admins" value={stats.admin_users} iconName="security" />
+            <StatCard label="Houses" value={stats.total_houses} iconName="home" />
           </View>
           <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
-            <StatCard label="Devices" value={stats.total_devices} icon="🔌" />
-            <StatCard label="Sensors" value={stats.total_sensors} icon="📡" />
-            <StatCard label="Activity" value={stats.today_activity} icon="📊" />
+            <StatCard label="Devices" value={stats.total_devices} iconName="device-hub" />
+            <StatCard label="Sensors" value={stats.total_sensors} iconName="sensors" />
+            <StatCard label="Activity" value={stats.today_activity} iconName="trending-up" />
           </View>
         </View>
       ) : (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2c3e50" />
+          <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={styles.loadingText}>Loading admin dashboard...</Text>
         </View>
       )}
@@ -145,10 +163,10 @@ export default function AdminPanel({ navigation }) {
 }
 
 // Stat Card Component
-function StatCard({ label, value, icon }) {
+function StatCard({ label, value, iconName }) {
   return (
     <View style={styles.statCard}>
-      <Text style={styles.statIcon}>{icon}</Text>
+      <MaterialIcons name={iconName} size={32} color={theme.colors.primary} />
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
@@ -158,34 +176,30 @@ function StatCard({ label, value, icon }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ecf0f1',
+    backgroundColor: theme.colors.background,
   },
-  header: {
-    backgroundColor: '#2c3e50',
-    paddingTop: 40,
-    paddingBottom: 24,
-    paddingHorizontal: 20,
+  contentHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
-  welcomeText: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 8,
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: theme.colors.primary,
   },
   adminName: {
-    fontSize: 16,
-    color: '#bdc3c7',
-    marginBottom: 12,
+    fontSize: 14,
+    color: theme.colors.gray1,
+    marginTop: 4,
   },
-  logoutButton: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#e74c3c',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 6,
+  headerLogoutButton: {
+    marginRight: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
-  logoutText: {
-    color: '#fff',
+  headerLogoutText: {
+    color: theme.colors.card,
     fontWeight: '600',
   },
   statsContainer: {
@@ -193,7 +207,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   statCard: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.card,
     flex: 1,
     marginHorizontal: 4,
     paddingVertical: 12,
@@ -237,7 +251,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   menuItem: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.card,
     borderRadius: 8,
     paddingVertical: 16,
     paddingHorizontal: 16,

@@ -16,7 +16,9 @@ import {
   TextInput,
   ScrollView,
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { apiService } from '../services/api';
+import theme from '../styles/theme';
 
 export default function UserHousesScreen({ navigation }) {
   const isMounted = useRef(true);
@@ -32,6 +34,21 @@ export default function UserHousesScreen({ navigation }) {
     city: '',
     country: '',
   });
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      title: 'Houses',
+      headerStyle: {
+        backgroundColor: theme.colors.primary,
+      },
+      headerTintColor: theme.colors.card,
+      headerTitleStyle: {
+        fontWeight: '700',
+        color: theme.colors.card,
+      },
+    });
+  }, [navigation]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -203,19 +220,21 @@ export default function UserHousesScreen({ navigation }) {
       onPress={() => navigation.navigate('UserFloors', { houseId: item.id, houseName: item.name })}
     >
       <View style={styles.houseHeader}>
-        <Text style={styles.houseName}>🏠 {item.name}</Text>
+        <Text style={styles.houseName}>{item.name}</Text>
         <View style={styles.houseActions}>
           <TouchableOpacity
-            style={styles.editBtn}
+            style={styles.iconButton}
             onPress={() => openEditModal(item)}
+            accessibilityLabel="Edit house"
           >
-            <Text style={styles.editBtnText}>✎</Text>
+            <MaterialIcons name="edit" size={18} color={theme.colors.text} />
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.deleteBtn}
+            style={styles.iconButtonDanger}
             onPress={() => deleteHouse(item.id)}
+            accessibilityLabel="Delete house"
           >
-            <Text style={styles.deleteBtnText}>🗑</Text>
+            <MaterialIcons name="delete-outline" size={18} color={theme.colors.card} />
           </TouchableOpacity>
         </View>
       </View>
@@ -235,12 +254,14 @@ export default function UserHousesScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      {/* Add House Button */}
-      <TouchableOpacity style={styles.addBtn} onPress={openAddModal}>
-        <Text style={styles.addBtnText}>+ Add House</Text>
-      </TouchableOpacity>
+      <View style={styles.contentHeader}>
+        <Text style={styles.sectionTitle}>My Houses</Text>
+        <TouchableOpacity style={styles.addBtn} onPress={openAddModal} activeOpacity={0.86}>
+          <MaterialIcons name="add" size={20} color={theme.colors.card} />
+          <Text style={styles.addBtnText}>Add</Text>
+        </TouchableOpacity>
+      </View>
 
-      {/* Houses List */}
       <FlatList
         data={houses}
         renderItem={renderHouseItem}
@@ -249,22 +270,22 @@ export default function UserHousesScreen({ navigation }) {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No houses yet</Text>
-            <Text style={styles.emptySubtext}>Tap "+ Add House" to create one</Text>
+            <Text style={styles.emptySubtext}>Tap "Add House" to create one</Text>
           </View>
         }
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadHouses(false)} />}
       />
 
-      {/* Add/Edit Modal */}
       <Modal visible={modalVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
-          <ScrollView style={styles.modalContent}>
+          <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalScrollContent}>
+            <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {editingHouse ? '✏️ Edit House' : '🏠 New House'}
+                {editingHouse ? 'Edit House' : 'New House'}
               </Text>
-              <TouchableOpacity onPress={resetForm}>
-                <Text style={styles.closeBtn}>✕</Text>
+              <TouchableOpacity onPress={resetForm} accessibilityLabel="Close modal">
+                <MaterialIcons name="close" size={22} color={theme.colors.gray1} />
               </TouchableOpacity>
             </View>
 
@@ -328,41 +349,63 @@ export default function UserHousesScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.colors.background,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: theme.colors.background,
   },
   loadingText: {
-    marginTop: 10,
+    marginTop: 12,
     fontSize: 14,
-    color: '#666',
+    fontWeight: '600',
+    color: theme.colors.gray1,
+  },
+  contentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
+  sectionTitle: {
+    color: theme.colors.primary,
+    fontSize: 22,
+    fontWeight: '700',
+    flex: 1,
+    minWidth: 0,
+    marginRight: 12,
   },
   addBtn: {
-    backgroundColor: '#27ae60',
-    margin: 15,
-    padding: 15,
-    borderRadius: 8,
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
   },
   addBtnText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: theme.colors.card,
+    fontSize: 14,
+    fontWeight: '700',
   },
   listContent: {
-    paddingHorizontal: 15,
+    paddingHorizontal: 16,
     paddingBottom: 20,
   },
   houseCard: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    padding: 15,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#e74c3c',
+    backgroundColor: theme.colors.card,
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 14,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
     elevation: 2,
   },
   houseHeader: {
@@ -372,55 +415,69 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   houseName: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '700',
     flex: 1,
-    color: '#333',
+    color: theme.colors.primary,
   },
   houseActions: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
+    marginLeft: 10,
   },
-  editBtn: {
-    backgroundColor: '#3498db',
-    padding: 8,
-    borderRadius: 4,
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: theme.colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  editBtnText: {
-    color: 'white',
-    fontSize: 16,
-  },
-  deleteBtn: {
-    backgroundColor: '#e74c3c',
-    padding: 8,
-    borderRadius: 4,
-  },
-  deleteBtnText: {
-    color: 'white',
-    fontSize: 16,
+  iconButtonDanger: {
+    width: 36,
+    height: 36,
+    backgroundColor: theme.colors.accent,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   houseAddress: {
     fontSize: 14,
-    color: '#666',
+    color: theme.colors.gray1,
     marginBottom: 4,
   },
   houseCity: {
     fontSize: 12,
-    color: '#999',
+    color: theme.colors.gray2,
   },
   emptyContainer: {
     alignItems: 'center',
     paddingTop: 60,
   },
+  emptyIconWrap: {
+    width: 74,
+    height: 74,
+    borderRadius: 999,
+    backgroundColor: theme.colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 1,
+  },
   emptyText: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#666',
+    fontWeight: '700',
+    color: theme.colors.primary,
+    marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#999',
-    marginTop: 8,
+    fontWeight: '600',
+    color: theme.colors.gray1,
   },
 
   // Modal styles
@@ -430,11 +487,23 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
+    backgroundColor: theme.colors.card,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 20,
+    paddingTop: 10,
     maxHeight: '80%',
+  },
+  modalScrollContent: {
+    paddingBottom: 28,
+  },
+  modalHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: theme.colors.gray2,
+    alignSelf: 'center',
+    marginBottom: 16,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -444,30 +513,26 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  closeBtn: {
-    fontSize: 24,
-    color: '#999',
+    fontWeight: '700',
+    color: theme.colors.primary,
   },
   formContainer: {
     marginBottom: 30,
   },
   label: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '700',
+    color: theme.colors.primary,
     marginBottom: 6,
     marginTop: 12,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
+    borderColor: theme.colors.gray2,
+    borderRadius: 14,
     padding: 12,
     fontSize: 14,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: theme.colors.background,
   },
   buttonGroup: {
     flexDirection: 'row',
@@ -477,23 +542,23 @@ const styles = StyleSheet.create({
   btn: {
     flex: 1,
     padding: 14,
-    borderRadius: 6,
+    borderRadius: 14,
     alignItems: 'center',
   },
   saveBtn: {
-    backgroundColor: '#27ae60',
+    backgroundColor: theme.colors.primary,
   },
   saveBtnText: {
-    color: 'white',
+    color: theme.colors.card,
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   cancelBtn: {
-    backgroundColor: '#ecf0f1',
+    backgroundColor: theme.colors.background,
   },
   cancelBtnText: {
-    color: '#333',
+    color: theme.colors.primary,
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
 });
