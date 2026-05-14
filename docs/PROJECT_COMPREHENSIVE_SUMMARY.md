@@ -598,9 +598,11 @@ c:\Users\namkz\Desktop\dacn\dadn\New folder\
 - ✅ Condition types: Temperature, Humidity, Motion, Light, CO2, Pressure
 - ✅ Per-room automation rules
 - ✅ Rule management: Create, Read, Update, Delete, Enable/Disable
+- ✅ Edit mode in mobile app pre-fills existing rule data and saves via PUT
 - ✅ Test rule: Check if conditions are currently met
 - ✅ 3 sample rules seeded with test data
 - ✅ Real-time execution with notifications
+- ✅ Automation executions are logged into activity feeds for the dashboard timeline
 
 ### 8. **Real-time Sensor & Device Updates** ⭐⭐⭐ NEW!
 - ✅ Socket.IO WebSocket connection for real-time sync
@@ -608,6 +610,7 @@ c:\Users\namkz\Desktop\dacn\dadn\New folder\
 - ✅ MQTT → Backend → WebSocket → Frontend pipeline
 - ✅ Real-time data broadcast to all connected clients
 - ✅ Dashboard auto-refreshes when sensor/device data changes
+- ✅ Dashboard also refreshes after automation-triggered device changes and activity log updates
 - ✅ Bi-directional: Receive updates + Send commands
 
 ### 9. **Adafruit Feed Mapping System** ⭐⭐⭐ NEW!

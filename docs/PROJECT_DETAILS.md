@@ -252,6 +252,10 @@ src/
 
 ---
 
+ 
+Notes:
+- `POST /api/device-status` persists the requested on/off state and level immediately.
+- Automation and schedule actions are also written to activity logs so the dashboard timeline stays in sync.
 ## 🔐 Configuration
 
 ### Backend (.env)
@@ -263,6 +267,10 @@ FLASK_ENV=development
 DATABASE_URL=sqlite:///smarthome.db
 
 # Security
+ 
+Automation rule update behavior:
+- `PUT /api/automation-rules/{rule_id}` updates the rule name, logic, action device, action status, action level, and conditions.
+- The mobile Automation screen supports inline edit flow for existing rules.
 SECRET_KEY=your-secret-key
 JWT_SECRET=your-jwt-secret
 
@@ -270,6 +278,8 @@ JWT_SECRET=your-jwt-secret
 ADAFRUIT_USERNAME=your-username
 ADAFRUIT_KEY=your-api-key
 
+ 
+The Dashboard also surfaces automation activity and device actions from `activity-logs`, not just sensor data.
 # Backend URL
 BACKEND_API_URL=http://localhost:8000
 ```
