@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { apiService } from '../../services/api';
 import { theme } from '../../styles/theme';
+import { formatRelative } from '../../utils/time';
 
 export default function ActivityLogs({ navigation }) {
   const [logs, setLogs] = useState([]);
@@ -71,11 +72,7 @@ export default function ActivityLogs({ navigation }) {
     return actions[action] || { icon: '•', color: theme.colors.gray2 };
   };
 
-  // Format timestamp
-  const formatTime = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleString();
-  };
+  // Use shared relative formatter
 
   // Render log item
   const renderLogItem = ({ item }) => {
@@ -98,7 +95,7 @@ export default function ActivityLogs({ navigation }) {
           </View>
         </View>
 
-        <Text style={styles.timestamp}>{formatTime(item.created_at)}</Text>
+        <Text style={styles.timestamp}>{formatRelative(item.created_at)}</Text>
 
         {item.description && (
           <Text style={styles.description}>{item.description}</Text>

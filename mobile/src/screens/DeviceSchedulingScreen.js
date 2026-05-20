@@ -14,6 +14,7 @@ import {
 import { useRoute } from '@react-navigation/native';
 import apiService from '../services/api';
 import theme from '../styles/theme';
+import { formatShortTime } from '../utils/time';
 
 const DeviceSchedulesScreen = ({ navigation }) => {
   const route = useRoute();
@@ -231,7 +232,7 @@ const DeviceSchedulesScreen = ({ navigation }) => {
               <View style={styles.scheduleInfo}>
                 <View style={styles.timeRow}>
                   <Text style={styles.scheduleTime}>
-                    {schedule.scheduled_time}
+                    {formatShortTime(schedule.scheduled_time)}
                   </Text>
                   <View
                     style={[
@@ -248,9 +249,11 @@ const DeviceSchedulesScreen = ({ navigation }) => {
                 </View>
 
                 <View style={styles.detailsRow}>
-                  <Text style={styles.detail}>
-                    Level: {schedule.action_level}%
-                  </Text>
+                  {device?.device_type === 'fan' && (
+                    <Text style={styles.detail}>
+                      Level: {schedule.action_level}%
+                    </Text>
+                  )}
                   <Text style={styles.detail}>
                     Duration:{' '}
                     {schedule.duration_minutes === 0
@@ -334,7 +337,6 @@ const DeviceSchedulesScreen = ({ navigation }) => {
             </View>
 
             <ScrollView style={styles.modalBody}>
-              {/* Time Input */}
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>Scheduled Time</Text>
                 <TextInput
@@ -345,10 +347,9 @@ const DeviceSchedulesScreen = ({ navigation }) => {
                     setFormData({ ...formData, scheduled_time: text })
                   }
                 />
-                <Text style={styles.hint}>Example: 08:30 (24-hour format)</Text>
+                <Text style={styles.hint}>Use 24-hour format, for example 08:30 or 21:05</Text>
               </View>
 
-              {/* Action Status */}
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>Action</Text>
                 <View style={styles.segmentButtons}>
@@ -357,15 +358,12 @@ const DeviceSchedulesScreen = ({ navigation }) => {
                       styles.segment,
                       formData.action_status === 'on' && styles.segmentActive,
                     ]}
-                    onPress={() =>
-                      setFormData({ ...formData, action_status: 'on' })
-                    }
+                    onPress={() => setFormData({ ...formData, action_status: 'on' })}
                   >
                     <Text
                       style={[
                         styles.segmentText,
-                        formData.action_status === 'on' &&
-                          styles.segmentTextActive,
+                        formData.action_status === 'on' && styles.segmentTextActive,
                       ]}
                     >
                       Turn ON
@@ -376,15 +374,12 @@ const DeviceSchedulesScreen = ({ navigation }) => {
                       styles.segment,
                       formData.action_status === 'off' && styles.segmentActive,
                     ]}
-                    onPress={() =>
-                      setFormData({ ...formData, action_status: 'off' })
-                    }
+                    onPress={() => setFormData({ ...formData, action_status: 'off' })}
                   >
                     <Text
                       style={[
                         styles.segmentText,
-                        formData.action_status === 'off' &&
-                          styles.segmentTextActive,
+                        formData.action_status === 'off' && styles.segmentTextActive,
                       ]}
                     >
                       Turn OFF
@@ -393,12 +388,9 @@ const DeviceSchedulesScreen = ({ navigation }) => {
                 </View>
               </View>
 
-              {/* Action Level */}
-              {formData.action_status === 'on' && (
+              {device?.device_type === 'fan' && formData.action_status === 'on' && (
                 <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>
-                    Level: {formData.action_level}%
-                  </Text>
+                  <Text style={styles.formLabel}>Level: {formData.action_level}%</Text>
                   <View style={styles.levelInputGroup}>
                     <TouchableOpacity
                       onPress={() =>
@@ -529,6 +521,23 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  contentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
+    backgroundColor: theme.colors.background,
+  },
+  sectionTitle: {
+    color: theme.colors.primary,
+    fontSize: 20,
+    fontWeight: '700',
+    flex: 1,
+    minWidth: 0,
+    marginRight: 12,
   },
   addButton: {
     backgroundColor: theme.colors.primary,

@@ -16,6 +16,7 @@ import { AuthContext } from '../context/AuthContext';
 import { apiService } from '../services/api';
 import { MaterialIcons } from '@expo/vector-icons';
 import { theme } from '../styles/theme';
+import { formatRelative, formatFull } from '../utils/time';
 
 const DeviceActivityLogsScreen = ({ navigation }) => {
   const route = useRoute();
@@ -157,22 +158,7 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
     }
   };
 
-  const formatTime = (timestamp) => {
-    const date = new Date(timestamp);
-    return date.toLocaleString();
-  };
-
-  const formatShortTime = (timestamp) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diff = now - date;
-
-    if (diff < 60000) return 'Just now';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-    if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
-    return date.toLocaleDateString();
-  };
+  
 
   if (loading) {
     return (
@@ -365,7 +351,7 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
               <View style={styles.lastActionContainer}>
                 <Text style={styles.lastActionLabel}>Last Action:</Text>
                 <Text style={styles.lastActionTime}>
-                  {formatTime(summary.last_action.timestamp)}
+                  {formatFull(summary.last_action.timestamp)}
                 </Text>
                 <Text style={styles.lastActionReason}>
                   {summary.last_action.reason}
@@ -482,7 +468,7 @@ const ActivityLogItem = ({ log }) => {
         <View style={styles.logItemHeader}>
           <View style={styles.logItemLeft}>
             <Text style={styles.logTime}>
-              {formatShortTime(log.timestamp)}
+              {formatRelative(log.timestamp)}
             </Text>
             <Text
               style={[
@@ -511,7 +497,7 @@ const ActivityLogItem = ({ log }) => {
         <View style={styles.logItemDetails}>
           <DetailRow
             label="Full Time"
-            value={formatTime(log.timestamp)}
+            value={formatFull(log.timestamp)}
           />
           <DetailRow
             label="Action"

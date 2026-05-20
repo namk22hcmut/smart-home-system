@@ -25,6 +25,7 @@ import theme from '../styles/theme';
 export default function UserSensorsScreen({ navigation, route }) {
   const { roomId, roomName } = route.params;
   const isMounted = useRef(true);
+  const canUseAdafruit = adafruitService.isTargetRoom(roomId);
   
   const [sensors, setSensors] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -165,6 +166,11 @@ export default function UserSensorsScreen({ navigation, route }) {
   // 🔥 Update sensor data from Adafruit
   const updateFromAdafruit = async (sensor) => {
     try {
+      if (!canUseAdafruit) {
+        Alert.alert('Not available', 'This room uses local database data only.');
+        return;
+      }
+
       console.log('🔄 [UPDATE START] Sensor:', sensor);
       setUpdatingFeeds(prev => ({ ...prev, [sensor.id]: true }));
       
@@ -306,6 +312,7 @@ export default function UserSensorsScreen({ navigation, route }) {
             )}
           </View>
           <View style={styles.sensorActions}>
+            {canUseAdafruit && (
             <TouchableOpacity
               style={[styles.updateBtn, isUpdating && styles.updateBtnLoading]}
               onPress={() => {
@@ -320,6 +327,7 @@ export default function UserSensorsScreen({ navigation, route }) {
                 <MaterialIcons name="refresh" size={18} color={theme.colors.card} />
               )}
             </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.editBtn}
               onPress={() => {

@@ -13,6 +13,7 @@ import {
 import { AuthContext } from '../context/AuthContext';
 import { apiService } from '../services/api';
 import { theme } from '../styles/theme';
+import { formatRelative } from '../utils/time';
 
 // Extracted NotificationItem component (outside main component)
 // This prevents React from recreating it on every render
@@ -305,22 +306,7 @@ const NotificationCenter = ({ navigation }) => {
     }
   };
 
-  // Format timestamp
-  const formatTime = (isoString) => {
-    const date = new Date(isoString);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-
-    return date.toLocaleDateString();
-  };
+  // use shared formatRelative helper
 
   // Empty state
   if (!loading && notifications.length === 0) {
@@ -367,7 +353,7 @@ const NotificationCenter = ({ navigation }) => {
                 handleMarkAsRead={handleMarkAsRead}
                 handleDelete={handleDelete}
                 getNotificationIcon={getNotificationIcon}
-                formatTime={formatTime}
+                formatTime={formatRelative}
                 styles={styles}
               />
             ))

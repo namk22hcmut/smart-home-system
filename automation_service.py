@@ -7,6 +7,7 @@ from notification_service import NotificationService
 from datetime import datetime
 import logging
 import operator as op
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,72 @@ OPERATORS = {
     '==': op.eq,
     '!=': op.ne,
 }
+
+
+def _publish_device_command_for_rule(device, action_status, action_level):
+    """Publish the same device command path used by schedules."""
+    try:
+        publish_device_command = None
+
+        try:
+            from app import publish_device_command as app_publish_device_command
+            publish_device_command = app_publish_device_command
+        except Exception:
+            main_module = sys.modules.get('__main__')
+            if main_module and hasattr(main_module, 'publish_device_command'):
+                publish_device_command = getattr(main_module, 'publish_device_command')
+
+        if not publish_device_command:
+            logger.warning(f"⚠️ Could not resolve publish_device_command for automation rule on device {device.device_id}")
+            return False
+
+        if device.device_type != 'light' and action_status == 'on':
+            return publish_device_command(device.device_id, 'level', action_level)
+
+        return publish_device_command(device.device_id, 'status', action_status)
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to publish automation command for device {device.device_id}: {e}")
+        return False
+
+
+def _emit_realtime_update_for_rule(device, action_status, action_level):
+    """Broadcast the same realtime payload shape used by other device updates."""
+    try:
+        socketio = None
+
+        main_module = sys.modules.get('__main__')
+        if main_module and hasattr(main_module, 'socketio'):
+            socketio = getattr(main_module, 'socketio')
+
+        if not socketio:
+            try:
+                from app import socketio as app_socketio
+                socketio = app_socketio
+            except Exception:
+                socketio = None
+
+        if not socketio:
+            logger.warning(f"⚠️ Could not resolve socketio for automation rule on device {device.device_id}")
+            return False
+
+        data_update = {
+            'type': 'device',
+            'source': 'automation_rule',
+            'device_id': device.device_id,
+            'room_id': device.room_id,
+            'device_type': device.device_type,
+            'status': device.status,
+            'level': device.level,
+            'rule_action_status': action_status,
+            'rule_action_level': action_level,
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        socketio.emit('realtime_update', data_update, to=None)
+        logger.info(f"📡 Broadcast automation update: {data_update}")
+        return True
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to broadcast automation update for device {device.device_id}: {e}")
+        return False
 
 class AutomationService:
     """Service for evaluating and executing automation rules"""
@@ -73,7 +140,7 @@ class AutomationService:
             sensor = Sensor.query.filter_by(room_id=room_id, sensor_type=sensor_type).first()
             
             if not sensor:
-                logger.warning(f"No sensor of type {sensor_type} in room {room_id}")
+                logger.info(f"Skipping sensor type {sensor_type} in room {room_id}: sensor not configured")
                 return None
             
             # Get latest sensor data
@@ -82,7 +149,7 @@ class AutomationService:
                 .first()
             
             if not latest_data:
-                logger.warning(f"No data for sensor {sensor.sensor_id}")
+                logger.info(f"Skipping sensor type {sensor_type} in room {room_id}: no readings yet")
                 return None
             
             return latest_data.value
@@ -172,6 +239,9 @@ class AutomationService:
             
             device.updated_at = datetime.utcnow()
             db.session.commit()
+
+            _publish_device_command_for_rule(device, rule.action_status, rule.action_level)
+            _emit_realtime_update_for_rule(device, rule.action_status, rule.action_level)
             
             logger.info(f"✅ Rule {rule.rule_name} executed: {device.device_name} → {rule.action_status} (level: {device.level})")
             
@@ -215,7 +285,7 @@ class AutomationService:
             return False
     
     @staticmethod
-    def check_all_rules():
+    def check_all_rules(room_id=None):
         """
         Check all active rules and execute any that are triggered
         Called periodically by scheduler
@@ -224,7 +294,11 @@ class AutomationService:
             Number of rules executed
         """
         try:
-            rules = AutomationRule.query.filter_by(is_active=True).all()
+            query = AutomationRule.query.filter_by(is_active=True)
+            if room_id is not None:
+                query = query.filter_by(room_id=room_id)
+
+            rules = query.all()
             executed_count = 0
             
             for rule in rules:
