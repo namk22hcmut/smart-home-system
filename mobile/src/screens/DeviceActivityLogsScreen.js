@@ -10,12 +10,15 @@ import {
   TouchableOpacity,
   Modal,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import { AuthContext } from '../context/AuthContext';
 import { apiService } from '../services/api';
 import { MaterialIcons } from '@expo/vector-icons';
 import { theme } from '../styles/theme';
+import { formatRelative, formatFull } from '../utils/time';
 
 const DeviceActivityLogsScreen = ({ navigation }) => {
   const route = useRoute();
@@ -26,7 +29,7 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
   const deviceId = device?.device_id || device?.id;
 
   const [logs, setLogs] = useState([]);
-  const [summary, setSummary] = useState(null);
+  const [counts, setCounts] = useState({ turn_on: 0, turn_off: 0, total: 0 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [limit] = useState(50);
@@ -49,17 +52,28 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
     }
   }, [device, deviceId]);
 
-  const loadActivityData = async () => {
+  // loadActivityData accepts an optional offset param to avoid stale state issues
+  const loadActivityData = async (offsetParam = null) => {
     try {
       setLoading(true);
 
+      const localOffset = typeof offsetParam === 'number' ? offsetParam : offset;
+
       // Build query string with filters
-      let queryString = `?limit=${limit}&offset=${offset}`;
+      let queryString = `?limit=${limit}&offset=${localOffset}`;
       if (searchText) queryString += `&search=${encodeURIComponent(searchText)}`;
       if (actionFilter) queryString += `&action=${actionFilter}`;
       if (triggeredByFilter) queryString += `&triggered_by=${triggeredByFilter}`;
       if (startDate) queryString += `&start_date=${encodeURIComponent(startDate)}`;
       if (endDate) queryString += `&end_date=${encodeURIComponent(endDate)}`;
+
+      // Build local day window (client local time -> ISO UTC) to compute client-side counts
+      const localStart = new Date();
+      localStart.setHours(0, 0, 0, 0);
+      const localEnd = new Date(localStart.getTime() + 24 * 60 * 60 * 1000 - 1);
+
+      // Debug: show the final query
+      console.log('📡 Fetching device activity logs:', `/devices/${deviceId}/activity-logs${queryString}`);
 
       // Get logs
       const logsResponse = await apiService.get(
@@ -67,21 +81,41 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
         token
       );
       if (logsResponse.success) {
-        if (offset === 0) {
-          setLogs(logsResponse.logs);
-        } else {
-          setLogs([...logs, ...logsResponse.logs]);
+        const incomingLogs = logsResponse.logs || [];
+
+        // Merge previous logs with incoming and deduplicate by log_id to avoid duplicate keys
+        const merged = localOffset === 0 ? incomingLogs : [...logs, ...incomingLogs];
+        const byId = new Map();
+        merged.forEach((l) => {
+          // prefer later items (incoming) to overwrite older with same id
+          byId.set(l.log_id, l);
+        });
+        const newLogs = Array.from(byId.values()).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        setLogs(newLogs);
+
+        // Client-side quick counts
+        try {
+          const start = localStart;
+          const end = localEnd;
+          const turnOnCountFromLogs = newLogs.filter((l) => {
+            const t = new Date(l.timestamp);
+            return t >= start && t <= end && l.action === 'turn_on';
+          }).length;
+          const turnOffCountFromLogs = newLogs.filter((l) => {
+            const t = new Date(l.timestamp);
+            return t >= start && t <= end && l.action === 'turn_off';
+          }).length;
+          const totalFromLogs = newLogs.filter((l) => {
+            const t = new Date(l.timestamp);
+            return t >= start && t <= end;
+          }).length;
+
+          setCounts({ turn_on: turnOnCountFromLogs, turn_off: turnOffCountFromLogs, total: totalFromLogs });
+        } catch (e) {
+          console.warn('Error computing client counts from logs:', e);
         }
       }
-
-      // Get summary
-      const summaryResponse = await apiService.get(
-        `/devices/${deviceId}/activity-summary`,
-        token
-      );
-      if (summaryResponse.success) {
-        setSummary(summaryResponse);
-      }
+      // No server summary call any more — UI will use client-side counts from logs
     } catch (error) {
       console.error('Error loading activity logs:', error);
     } finally {
@@ -89,22 +123,36 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
     }
   };
 
+  // Reload data when screen regains focus (so summary updates after changes)
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (device && deviceId) {
+        setOffset(0);
+        loadActivityData(0);
+      }
+    });
+    return unsubscribe;
+  }, [navigation, device, deviceId, searchText, actionFilter, triggeredByFilter, startDate, endDate]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     setOffset(0);
-    await loadActivityData();
+    await loadActivityData(0);
     setRefreshing(false);
   };
 
   const loadMore = () => {
-    setOffset(offset + limit);
-    loadActivityData();
+    setOffset((prev) => {
+      const newOffset = prev + limit;
+      loadActivityData(newOffset);
+      return newOffset;
+    });
   };
 
   const applyFilters = () => {
     setOffset(0);
     setShowFilters(false);
-    loadActivityData();
+    loadActivityData(0);
   };
 
   const clearFilters = () => {
@@ -114,6 +162,16 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
     setStartDate('');
     setEndDate('');
     setOffset(0);
+    loadActivityData(0);
+  };
+
+  // Reset form fields only (do not auto-apply)
+  const resetForm = () => {
+    setSearchText('');
+    setActionFilter('');
+    setTriggeredByFilter('');
+    setStartDate('');
+    setEndDate('');
   };
 
   const getActionColor = (action) => {
@@ -157,22 +215,7 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
     }
   };
 
-  const formatTime = (timestamp) => {
-    const date = new Date(timestamp);
-    return date.toLocaleString();
-  };
-
-  const formatShortTime = (timestamp) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diff = now - date;
-
-    if (diff < 60000) return 'Just now';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-    if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
-    return date.toLocaleDateString();
-  };
+  
 
   if (loading) {
     return (
@@ -203,8 +246,8 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
             style={styles.clearButton}
             onPress={() => {
               clearFilters();
-              setOffset(0);
-              loadActivityData();
+                      setOffset(0);
+                      loadActivityData();
             }}
           >
             <MaterialIcons name="clear" size={18} color="#F44336" />
@@ -217,7 +260,11 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
       {/* Filter Modal */}
       <Modal visible={showFilters} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ width: '100%', alignItems: 'center' }}
+          >
+            <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>🔍 Filter Logs</Text>
               <TouchableOpacity onPress={() => setShowFilters(false)}>
@@ -225,7 +272,7 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody}>
+            <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 24 }}>
               {/* Search Box */}
               <Text style={styles.filterLabel}>Search Reason</Text>
               <TextInput
@@ -323,13 +370,22 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
+                style={styles.resetButton}
+                onPress={() => {
+                  resetForm();
+                }}
+              >
+                <Text style={styles.resetButtonText}>Reset</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
                 style={styles.applyButton}
                 onPress={applyFilters}
               >
                 <Text style={styles.applyButtonText}>Apply Filters</Text>
               </TouchableOpacity>
             </View>
-          </View>
+            </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -339,41 +395,7 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {/* Summary Card */}
-        {summary && (
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>Today's Summary</Text>
-            <View style={styles.summaryGrid}>
-              <SummaryItem
-                label="Turned On"
-                value={summary.today_turn_on}
-                color="#4CAF50"
-              />
-              <SummaryItem
-                label="Turned Off"
-                value={summary.today_turn_off}
-                color="#F44336"
-              />
-              <SummaryItem
-                label="Total Actions"
-                value={summary.today_total_actions}
-                color="#2196F3"
-              />
-            </View>
-
-            {summary.last_action && (
-              <View style={styles.lastActionContainer}>
-                <Text style={styles.lastActionLabel}>Last Action:</Text>
-                <Text style={styles.lastActionTime}>
-                  {formatTime(summary.last_action.timestamp)}
-                </Text>
-                <Text style={styles.lastActionReason}>
-                  {summary.last_action.reason}
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
+        {/* Summary removed - activity logs list below */}
 
         {/* Activity Logs */}
         <View style={styles.logsSection}>
@@ -403,13 +425,7 @@ const DeviceActivityLogsScreen = ({ navigation }) => {
   );
 };
 
-// Summary Item Component
-const SummaryItem = ({ label, value, color }) => (
-  <View style={styles.summaryItem}>
-    <Text style={[styles.summaryItemValue, { color }]}>{value}</Text>
-    <Text style={styles.summaryItemLabel}>{label}</Text>
-  </View>
-);
+// Summary removed (UI simplified)
 
 // Activity Log Item Component
 const ActivityLogItem = ({ log }) => {
@@ -482,7 +498,7 @@ const ActivityLogItem = ({ log }) => {
         <View style={styles.logItemHeader}>
           <View style={styles.logItemLeft}>
             <Text style={styles.logTime}>
-              {formatShortTime(log.timestamp)}
+              {formatRelative(log.timestamp)}
             </Text>
             <Text
               style={[
@@ -511,7 +527,7 @@ const ActivityLogItem = ({ log }) => {
         <View style={styles.logItemDetails}>
           <DetailRow
             label="Full Time"
-            value={formatTime(log.timestamp)}
+            value={formatFull(log.timestamp)}
           />
           <DetailRow
             label="Action"
@@ -596,62 +612,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
   },
-  summaryCard: {
-    backgroundColor: theme.colors.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  summaryTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
-  },
-  summaryGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEE',
-  },
-  summaryItem: {
-    alignItems: 'center',
-  },
-  summaryItemValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  summaryItemLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
-  },
-  lastActionContainer: {
-    marginTop: 8,
-  },
-  lastActionLabel: {
-    fontSize: 12,
-    color: '#999',
-    marginBottom: 4,
-  },
-  lastActionTime: {
-    fontSize: 12,
-    color: '#333',
-    fontWeight: '500',
-  },
-  lastActionReason: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
+  
   logsSection: {
     marginBottom: 20,
   },
@@ -779,14 +740,16 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
   },
   modalContent: {
     backgroundColor: theme.colors.card,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '85%',
+    borderRadius: 16,
+    width: '96%',
+    alignSelf: 'center',
+    height: '65%',
     flexDirection: 'column',
+    paddingBottom: 8,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -805,7 +768,9 @@ const styles = StyleSheet.create({
   modalBody: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 12,
+    paddingBottom: 8,
+    minHeight: 180,
   },
   filterLabel: {
     fontSize: 14,
@@ -835,7 +800,7 @@ const styles = StyleSheet.create({
   filterOptions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    marginRight: -8,
   },
   filterOption: {
     paddingHorizontal: 12,
@@ -844,6 +809,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#DDD',
     backgroundColor: '#F9F9F9',
+    marginRight: 8,
+    marginBottom: 8,
   },
   filterOptionActive: {
     backgroundColor: '#2196F3',
@@ -859,9 +826,9 @@ const styles = StyleSheet.create({
   },
   modalFooter: {
     flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: '#EEE',
     backgroundColor: '#FAFAFA',
@@ -879,6 +846,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
+  resetButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#999',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+  },
+  resetButtonText: {
+    color: '#333',
+    fontWeight: '600',
+    fontSize: 14,
+  },
   applyButton: {
     flex: 1,
     paddingVertical: 12,
@@ -888,6 +869,20 @@ const styles = StyleSheet.create({
   },
   applyButtonText: {
     color: theme.colors.card,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  resetButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#999',
+    alignItems: 'center',
+    marginHorizontal: 8,
+  },
+  resetButtonText: {
+    color: '#333',
     fontWeight: '600',
     fontSize: 14,
   },

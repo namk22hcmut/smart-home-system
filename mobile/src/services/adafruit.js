@@ -1,51 +1,96 @@
 /**
  * Adafruit Integration Service - SIMPLIFIED VERSION
  * 
- * Demo Setup: Only 3 Feeds (humidity, temperature, fan)
- * No complex mappings or feed_key lookups
+ * Room-aware setup: data is fetched by sensor_id/device context
+ * so the app no longer depends on fixed Adafruit feed names.
  * 
  * 📌 ON-DEMAND ONLY - No auto-polling
  * Called when user interacts (refresh, control, etc.)
  */
 
 import { apiService } from './api';
+import { formatShortTime } from '../utils/time';
 
-// ============================================
-// 3 FIXED FEEDS
-// ============================================
-const FEEDS = {
-  TEMPERATURE: 'temperature',
-  HUMIDITY: 'humidity',
-  FAN: 'fan',
+export const ADAFRUIT_TARGET = {
+  houseId: 1,
+  floorId: 1,
+  roomId: 1,
 };
 
 export const adafruitService = {
+  isTargetRoom: (roomId) => Number(roomId) === ADAFRUIT_TARGET.roomId,
+
+  getLatestReading: (data = []) => {
+    if (!Array.isArray(data) || data.length === 0) {
+      return null;
+    }
+
+    const sorted = [...data].sort((left, right) => {
+      const leftTime = new Date(left?.created_at || left?.timestamp || 0).getTime();
+      const rightTime = new Date(right?.created_at || right?.timestamp || 0).getTime();
+      return leftTime - rightTime;
+    });
+
+    return sorted[sorted.length - 1] || null;
+  },
+
+  getSensorHistoryData: async (sensorId, limit = 48) => {
+    try {
+      const response = await apiService.get(`/sensors/${sensorId}/data`);
+
+      if (response?.success && response?.data) {
+        const data = Array.isArray(response.data) ? response.data.slice(0, limit) : [];
+        const latest = adafruitService.getLatestReading(data);
+        const reversed = [...data].sort((left, right) => new Date(left?.timestamp || 0) - new Date(right?.timestamp || 0));
+        const chartData = {
+          labels: reversed.map(p => formatShortTime(p.timestamp)),
+          values: reversed.map(p => parseFloat(p.value)),
+        };
+
+        return { success: true, latestValue: latest?.value, chartData, data };
+      }
+
+      return { success: false };
+    } catch (error) {
+      console.error(`❌ Sensor history fetch error (sensor_id=${sensorId}):`, error.message);
+      return { success: false };
+    }
+  },
+
+  getHouseSensors: async (houseId) => {
+    const sensors = [];
+
+    const floors = await apiService.getFloors(houseId);
+    for (const floor of floors) {
+      const rooms = await apiService.getRooms(floor.id);
+      for (const room of rooms) {
+        const response = await apiService.get(`/rooms/${room.id}/sensors`);
+        if (response?.success && Array.isArray(response.data)) {
+          sensors.push(...response.data.map(sensor => ({
+            ...sensor,
+            room_id: room.id,
+            floor_id: floor.id,
+          })));
+        }
+      }
+    }
+
+    return sensors;
+  },
+
   /**
    * Get temperature data from Adafruit
    */
-  getTemperatureData: async (limit = 48) => {
+  getTemperatureData: async (limit = 48, sensorId = null) => {
     try {
-      const response = await apiService.get(
-        `/adafruit/data/${FEEDS.TEMPERATURE}?limit=${limit}`
-      );
-      
-      if (response?.success && response?.data) {
-        const data = response.data;
-        const latest = data[0];
-        
-        // Format for chart
-        const reversed = [...data].reverse();
-        const chartData = {
-          labels: reversed.map(p => {
-            const date = new Date(p.created_at);
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          }),
-          values: reversed.map(p => parseFloat(p.value)),
-        };
-        
-        console.log(`✅ Temperature: ${latest?.value}°C`);
-        return { success: true, latestValue: latest?.value, chartData, data };
+      if (sensorId) {
+        const result = await adafruitService.getSensorHistoryData(sensorId, limit);
+        if (result.success) {
+          console.log(`✅ Temperature sensor ${sensorId}: ${result.latestValue}°C`);
+        }
+        return result;
       }
+
       return { success: false };
     } catch (error) {
       console.error('❌ Temperature fetch error:', error.message);
@@ -56,29 +101,16 @@ export const adafruitService = {
   /**
    * Get humidity data from Adafruit
    */
-  getHumidityData: async (limit = 48) => {
+  getHumidityData: async (limit = 48, sensorId = null) => {
     try {
-      const response = await apiService.get(
-        `/adafruit/data/${FEEDS.HUMIDITY}?limit=${limit}`
-      );
-      
-      if (response?.success && response?.data) {
-        const data = response.data;
-        const latest = data[0];
-        
-        // Format for chart
-        const reversed = [...data].reverse();
-        const chartData = {
-          labels: reversed.map(p => {
-            const date = new Date(p.created_at);
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          }),
-          values: reversed.map(p => parseFloat(p.value)),
-        };
-        
-        console.log(`✅ Humidity: ${latest?.value}%`);
-        return { success: true, latestValue: latest?.value, chartData, data };
+      if (sensorId) {
+        const result = await adafruitService.getSensorHistoryData(sensorId, limit);
+        if (result.success) {
+          console.log(`✅ Humidity sensor ${sensorId}: ${result.latestValue}%`);
+        }
+        return result;
       }
+
       return { success: false };
     } catch (error) {
       console.error('❌ Humidity fetch error:', error.message);
@@ -89,18 +121,15 @@ export const adafruitService = {
   /**
    * Get fan status from Adafruit
    */
-  getFanData: async (limit = 5) => {
+  // Get fan status by device id. If deviceId omitted, returns failure.
+  getFanData: async (deviceId = null) => {
     try {
-      const response = await apiService.get(
-        `/adafruit/data/${FEEDS.FAN}?limit=${limit}`
-      );
-      
-      if (response?.success && response?.data) {
-        const data = response.data;
-        const latest = data[0];
-        
-        console.log(`✅ Fan level: ${latest?.value}%`);
-        return { success: true, latestValue: latest?.value, data };
+      if (!deviceId) return { success: false, error: 'deviceId required' };
+
+      const response = await apiService.get(`/devices/${deviceId}`);
+      if (response?.success && response?.device) {
+        const device = response.device;
+        return { success: true, latestValue: device.level, status: device.status, device };
       }
       return { success: false };
     } catch (error) {
@@ -112,17 +141,20 @@ export const adafruitService = {
   /**
    * Set fan level (0-100)
    */
-  setFanLevel: async (level) => {
+  // Set fan level for a specific device id (0-100)
+  setFanLevel: async (deviceId, level) => {
     try {
+      if (!deviceId) return { success: false, error: 'deviceId required' };
       const normalizedLevel = Math.max(0, Math.min(100, level));
-      
-      // Control fan via API (which publishes to Adafruit)
-      const response = await apiService.put('/devices/1', {
+
+      // Use device-status endpoint to update device
+      const response = await apiService.post('/device-status', {
+        device_id: deviceId,
         level: normalizedLevel,
       });
-      
+
       if (response?.success) {
-        console.log(`✅ Fan set to ${normalizedLevel}%`);
+        console.log(`✅ Fan set to ${normalizedLevel}% for device ${deviceId}`);
         return { success: true, level: normalizedLevel };
       }
       return { success: false };
@@ -133,19 +165,34 @@ export const adafruitService = {
   },
 
   /**
-   * Get all sensor data (temperature + humidity) for dashboard
+   * Get all sensor data (temperature, humidity, light, motion) for a house
    */
-  getAllSensorData: async () => {
+  getAllSensorData: async (houseId) => {
     try {
-      const [tempResult, humidityResult] = await Promise.all([
-        adafruitService.getTemperatureData(48),
-        adafruitService.getHumidityData(48),
+      if (!houseId) {
+        return { success: false, error: 'houseId is required' };
+      }
+
+      // Get ALL sensors from the house (not just room 1)
+      const sensors = await adafruitService.getHouseSensors(houseId);
+      const temperatureSensor = sensors.find(sensor => sensor.type === 'temperature');
+      const humiditySensor = sensors.find(sensor => sensor.type === 'humidity');
+      const lightSensor = sensors.find(sensor => sensor.type === 'light');
+      const motionSensor = sensors.find(sensor => sensor.type === 'motion');
+
+      const [tempResult, humidityResult, lightResult, motionResult] = await Promise.all([
+        temperatureSensor ? adafruitService.getTemperatureData(48, temperatureSensor.id) : Promise.resolve({ success: false }),
+        humiditySensor ? adafruitService.getHumidityData(48, humiditySensor.id) : Promise.resolve({ success: false }),
+        lightSensor ? adafruitService.getSensorHistoryData(lightSensor.id, 48) : Promise.resolve({ success: false }),
+        motionSensor ? adafruitService.getSensorHistoryData(motionSensor.id, 48) : Promise.resolve({ success: false }),
       ]);
 
       return {
-        success: tempResult.success && humidityResult.success,
+        success: tempResult.success || humidityResult.success || lightResult.success || motionResult.success,
         temperature: tempResult,
         humidity: humidityResult,
+        light: lightResult,
+        motion: motionResult,
       };
     } catch (error) {
       console.error('❌ Sensor data fetch error:', error.message);

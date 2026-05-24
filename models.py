@@ -226,6 +226,7 @@ class Device(db.Model):
     # Relationships
     histories = db.relationship('DeviceHistory', backref='device', lazy=True, cascade='all, delete-orphan')
     schedules = db.relationship('Schedule', backref='device', lazy=True, cascade='all, delete-orphan')
+    activity_logs = db.relationship('DeviceActivityLog', back_populates='device', lazy=True, cascade='all, delete-orphan')
     
     def __repr__(self):
         return f'<Device {self.device_name}>'
@@ -537,7 +538,7 @@ class DeviceActivityLog(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     
     # Relationships
-    device = db.relationship('Device', backref='activity_logs')
+    device = db.relationship('Device', back_populates='activity_logs')
     user = db.relationship('User', backref='device_activity_logs')
     automation_rule = db.relationship('AutomationRule', foreign_keys=[automation_rule_id])
     schedule = db.relationship('Schedule', foreign_keys=[schedule_id])

@@ -120,11 +120,27 @@ class AdminService:
             user = User.query.get(user_id)
             if not user:
                 return False
-            
             username = user.username
+
+            # Delete notifications belonging to this user (notification.user_id is NOT NULL)
+            from models import Notification, UserHouseAccess
+            Notification.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+
+            # Remove any user-house access records where this user is the sharedBy (nullable) or the user
+            UserHouseAccess.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+            UserHouseAccess.query.filter_by(sharedBy_user_id=user_id).update({'sharedBy_user_id': None}, synchronize_session=False)
+
+            # Delete any Adafruit feed mappings that belong to houses owned by this user
+            from models import House, AdafruitFeedMapping
+            house_ids = [h.house_id for h in House.query.filter_by(user_id=user_id).all()]
+            if house_ids:
+                AdafruitFeedMapping.query.filter(AdafruitFeedMapping.house_id.in_(house_ids)).delete(synchronize_session=False)
+
+            db.session.flush()
+
             db.session.delete(user)
             db.session.commit()
-            
+
             logger.info(f"✅ User {username} deleted")
             return True
         except Exception as e:

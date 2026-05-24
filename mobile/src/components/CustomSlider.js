@@ -8,68 +8,92 @@ import {
 } from 'react-native';
 import { theme } from '../styles/theme';
 
-const CustomSlider = ({ min = 0, max = 100, value = 0, onChange, style }) => {
-  const [sliderValue, setSliderValue] = useState(value);
-  const sliderLayout = useRef({ width: 0, x: 0 });
-  const panStartValue = useRef(0);
+const CustomSlider = ({ min = 0, max = 100, value = 0, onChange, style, thumbSize = 28, containerHeight = 48 }) => {
+  const [displayValue, setDisplayValue] = useState(value);
+  const sliderLayout = useRef({ width: 0 });
+  const animatedValue = useRef(new Animated.Value(value));
+  const pendingValue = useRef(value);
+  const dragStartValue = useRef(value);
 
   // Sync external value changes
   useEffect(() => {
-    setSliderValue(value);
+    setDisplayValue(value);
+    animatedValue.current.setValue(value);
   }, [value]);
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (event, { dx }) => {
-        panStartValue.current = sliderValue;
+      onPanResponderGrant: () => {
+        dragStartValue.current = pendingValue.current;
       },
       onPanResponderMove: (event, { dx }) => {
+        // Calculate new position smoothly
         if (sliderLayout.current.width > 0) {
-          const ratio = dx / sliderLayout.current.width;
-          const newValue = Math.max(
-            min,
-            Math.min(max, Math.round(panStartValue.current + ratio * (max - min)))
-          );
-          setSliderValue(newValue);
-          onChange?.(newValue);
+          const valuePerPixel = (max - min) / sliderLayout.current.width;
+          const newValue = dragStartValue.current + dx * valuePerPixel;
+          const clampedValue = Math.max(min, Math.min(max, newValue));
+          
+          // Update animated value directly (smooth, non-blocking)
+          animatedValue.current.setValue(clampedValue);
+          
+          // Update display value (rounded)
+          const roundedValue = Math.round(clampedValue);
+          setDisplayValue(roundedValue);
+          pendingValue.current = roundedValue;
         }
+      },
+      onPanResponderRelease: () => {
+        onChange?.(pendingValue.current);
+      },
+      onPanResponderTerminate: () => {
+        onChange?.(pendingValue.current);
       },
     })
   ).current;
 
   const handleLayout = (e) => {
-    sliderLayout.current = {
-      width: e.nativeEvent.layout.width,
-      x: e.nativeEvent.layout.x,
-    };
+    sliderLayout.current.width = e.nativeEvent.layout.width;
   };
 
-  const percentage = ((sliderValue - min) / (max - min)) * 100;
+  // Use animated value for smooth tracking
+  const animatedPercentage = animatedValue.current.interpolate({
+    inputRange: [min, max],
+    outputRange: ['0%', '100%'],
+  });
+
+  const thumbHalf = Math.round(thumbSize / 2);
+  const thumbStyle = {
+    width: thumbSize,
+    height: thumbSize,
+    borderRadius: thumbHalf,
+    top: (containerHeight - thumbSize) / 2,
+  };
 
   return (
-    <View style={[styles.container, style]}>
-      <View style={styles.sliderContainer} onLayout={handleLayout}>
-        <View style={styles.track}>
-          <View
+    <View style={[styles.container, { height: containerHeight }, style]}>
+      <View style={[styles.sliderContainer, { height: containerHeight }]} onLayout={handleLayout} {...panResponder.panHandlers}>
+        <View style={[styles.track, { height: Math.max(4, Math.round(containerHeight / 8)) }]}>
+          <Animated.View
             style={[
               styles.fill,
               {
-                width: `${percentage}%`,
+                width: animatedPercentage,
+                height: '100%',
               },
             ]}
           />
         </View>
-        <View
+        <Animated.View
           style={[
             styles.thumb,
+            thumbStyle,
             {
-              left: `${percentage}%`,
-              marginLeft: -10,
+              left: animatedPercentage,
+              marginLeft: -thumbHalf,
             },
           ]}
-          {...panResponder.panHandlers}
         />
       </View>
     </View>
@@ -83,28 +107,22 @@ const styles = StyleSheet.create({
   },
   sliderContainer: {
     width: '100%',
-    height: 40,
     justifyContent: 'center',
     position: 'relative',
   },
   track: {
-    height: 4,
     backgroundColor: theme.colors.gray1,
-    borderRadius: 2,
+    borderRadius: 8,
     width: '100%',
   },
   fill: {
     height: '100%',
     backgroundColor: theme.colors.accent,
-    borderRadius: 2,
+    borderRadius: 8,
   },
   thumb: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: theme.colors.accent,
     position: 'absolute',
-    top: 10,
+    backgroundColor: theme.colors.accent,
   },
   value: {
     marginTop: 8,

@@ -132,13 +132,13 @@ const AutomationRulesScreen = ({ route, navigation }) => {
         return;
       }
       console.log('➕ Adding new condition');
-      setFormData({
-        ...formData,
+      setFormData(prev => ({
+        ...prev,
         conditions: [
           ...currentConditions,
           { sensor_type: 'temperature', operator: '>', threshold_value: '30' }
         ]
-      });
+      }));
     } catch (error) {
       console.error('❌ Error adding condition:', error);
       Alert.alert('Error', 'Failed to add condition');
@@ -154,7 +154,7 @@ const AutomationRulesScreen = ({ route, navigation }) => {
       }
       console.log('➖ Removing condition', index);
       const newConditions = currentConditions.filter((_, i) => i !== index);
-      setFormData({ ...formData, conditions: newConditions });
+      setFormData(prev => ({ ...prev, conditions: newConditions }));
     } catch (error) {
       console.error('❌ Error removing condition:', error);
       Alert.alert('Error', 'Failed to remove condition');
@@ -171,7 +171,7 @@ const AutomationRulesScreen = ({ route, navigation }) => {
       console.log(`📝 Updating condition ${index}.${field} → ${value}`);
       const newConditions = [...currentConditions];
       newConditions[index] = { ...newConditions[index], [field]: value };
-      setFormData({ ...formData, conditions: newConditions });
+      setFormData(prev => ({ ...prev, conditions: newConditions }));
     } catch (error) {
       console.error('❌ Error updating condition:', error);
     }
@@ -207,8 +207,10 @@ const AutomationRulesScreen = ({ route, navigation }) => {
         }
       }
 
-      if (formData.action_status === 'on' && (!formData.action_level || formData.action_level === '')) {
-        Alert.alert('Error', 'Please enter action level (0-100)');
+      // Only require action_level when the selected action device is a fan
+      const selectedActionDevice = devices.find(d => ((d.device_id || d.id) && (d.device_id || d.id).toString() === String(formData.action_device_id)));
+      if (formData.action_status === 'on' && selectedActionDevice?.device_type === 'fan' && (!formData.action_level || formData.action_level === '')) {
+        Alert.alert('Error', 'Please enter action level (0-100) for fan devices');
         return;
       }
 
@@ -411,7 +413,7 @@ const AutomationRulesScreen = ({ route, navigation }) => {
           <Text style={styles.sectionLabel}>Action:</Text>
           <Text style={styles.actionText}>
             Turn {rule.action_device_id ? `${actionDevice?.device_name || actionDevice?.name || 'Device'}` : 'Device'} {(rule.action_status || 'unknown').toUpperCase()}
-            {rule.action_status === 'on' && ` (Level: ${rule.action_level}%)`}
+            {actionDevice?.device_type === 'fan' && rule.action_status === 'on' && ` (Level: ${rule.action_level}%)`}
           </Text>
         </View>
 
@@ -442,74 +444,6 @@ const AutomationRulesScreen = ({ route, navigation }) => {
     }
   };
 
-  const ConditionInput = ({ index, condition }) => {
-    try {
-      if (!condition) {
-        console.warn(`⚠️ Condition ${index} is undefined`);
-        return (
-          <Text style={{ color: 'red', padding: 10 }}>
-            Error: Condition data missing
-          </Text>
-        );
-      }
-
-      return (
-        <View style={styles.conditionInput}>
-          <Picker
-            selectedValue={condition.sensor_type || 'temperature'}
-            style={styles.picker}
-            onValueChange={(value) => {
-              console.log(`📝 Condition ${index}: sensor_type → ${value}`);
-              updateCondition(index, 'sensor_type', value);
-            }}
-          >
-            {SENSOR_TYPES.map(type => (
-              <Picker.Item key={type} label={type} value={type} />
-            ))}
-          </Picker>
-
-          <Picker
-            selectedValue={condition.operator || '>'}
-            style={styles.picker}
-            onValueChange={(value) => {
-              console.log(`📝 Condition ${index}: operator → ${value}`);
-              updateCondition(index, 'operator', value);
-            }}
-          >
-            {OPERATORS.map(op => (
-              <Picker.Item key={op} label={op} value={op} />
-            ))}
-          </Picker>
-
-          <TextInput
-            style={styles.input}
-            placeholder="Value"
-            value={String(condition.threshold_value || '')}
-            onChangeText={(value) => {
-              console.log(`📝 Condition ${index}: threshold_value → ${value}`);
-              updateCondition(index, 'threshold_value', value);
-            }}
-            keyboardType="decimal-pad"
-          />
-
-          <TouchableOpacity
-            style={styles.removeButton}
-            onPress={() => removeCondition(index)}
-          >
-            <Text style={styles.removeButtonText}>×</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    } catch (error) {
-      console.error(`❌ Error rendering ConditionInput ${index}:`, error);
-      return (
-        <Text style={{ color: 'red', padding: 10 }}>
-          Error rendering condition
-        </Text>
-      );
-    }
-  };
-
   if (loading) {
     return (
       <View style={styles.container}>
@@ -517,6 +451,8 @@ const AutomationRulesScreen = ({ route, navigation }) => {
       </View>
     );
   }
+  // Determine selected action device from the form for conditional UI
+  const selectedActionDevice = devices.find(d => ((d.device_id || d.id) && (d.device_id || d.id).toString() === String(formData.action_device_id)));
 
   return (
     <View style={styles.container}>
@@ -578,13 +514,57 @@ const AutomationRulesScreen = ({ route, navigation }) => {
                 value={formData.rule_name || ''}
                 onChangeText={(value) => {
                   console.log('📝 Rule Name:', value);
-                  setFormData({ ...formData, rule_name: value });
+                  setFormData(prev => ({ ...prev, rule_name: value }));
                 }}
               />
 
               <Text style={styles.label}>Conditions ({formData.logic_type})</Text>
               {(formData.conditions || []).map((cond, idx) => (
-                <ConditionInput key={`cond-${idx}`} index={idx} condition={cond} />
+                <View key={`cond-${idx}`} style={styles.conditionInput}>
+                  <Picker
+                    selectedValue={cond?.sensor_type || 'temperature'}
+                    style={styles.picker}
+                    onValueChange={(value) => {
+                      console.log(`📝 Condition ${idx}: sensor_type → ${value}`);
+                      updateCondition(idx, 'sensor_type', value);
+                    }}
+                  >
+                    {SENSOR_TYPES.map(type => (
+                      <Picker.Item key={type} label={type} value={type} />
+                    ))}
+                  </Picker>
+
+                  <Picker
+                    selectedValue={cond?.operator || '>'}
+                    style={styles.picker}
+                    onValueChange={(value) => {
+                      console.log(`📝 Condition ${idx}: operator → ${value}`);
+                      updateCondition(idx, 'operator', value);
+                    }}
+                  >
+                    {OPERATORS.map(op => (
+                      <Picker.Item key={op} label={op} value={op} />
+                    ))}
+                  </Picker>
+
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Value"
+                    value={String(cond?.threshold_value ?? '')}
+                    onChangeText={(value) => {
+                      console.log(`📝 Condition ${idx}: threshold_value → ${value}`);
+                      updateCondition(idx, 'threshold_value', value);
+                    }}
+                    keyboardType="decimal-pad"
+                  />
+
+                  <TouchableOpacity
+                    style={styles.removeButton}
+                    onPress={() => removeCondition(idx)}
+                  >
+                    <Text style={styles.removeButtonText}>×</Text>
+                  </TouchableOpacity>
+                </View>
               ))}
 
               <TouchableOpacity style={styles.addConditionButton} onPress={addCondition}>
@@ -595,7 +575,7 @@ const AutomationRulesScreen = ({ route, navigation }) => {
               <Picker
                 selectedValue={formData.logic_type}
                 style={styles.picker}
-                onValueChange={(value) => setFormData({ ...formData, logic_type: value })}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, logic_type: value }))}
               >
                 {LOGIC_TYPES.map(type => (
                   <Picker.Item key={type} label={type} value={type} />
@@ -608,7 +588,7 @@ const AutomationRulesScreen = ({ route, navigation }) => {
                 style={styles.picker}
                 onValueChange={(value) => {
                   console.log('🎯 Selected device:', value);
-                  setFormData({ ...formData, action_device_id: value });
+                  setFormData(prev => ({ ...prev, action_device_id: value }));
                 }}
               >
                 <Picker.Item label="Select a device..." value="" />
@@ -633,13 +613,13 @@ const AutomationRulesScreen = ({ route, navigation }) => {
               <Picker
                 selectedValue={formData.action_status}
                 style={styles.picker}
-                onValueChange={(value) => setFormData({ ...formData, action_status: value })}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, action_status: value }))}
               >
                 <Picker.Item label="Turn ON" value="on" />
                 <Picker.Item label="Turn OFF" value="off" />
               </Picker>
 
-              {formData.action_status === 'on' && (
+              {formData.action_status === 'on' && selectedActionDevice?.device_type === 'fan' && (
                 <>
                   <Text style={styles.label}>Device Level (0-100%)</Text>
                   <TextInput
@@ -648,7 +628,7 @@ const AutomationRulesScreen = ({ route, navigation }) => {
                     value={formData.action_level || ''}
                     onChangeText={(value) => {
                       console.log('📝 Action Level:', value);
-                      setFormData({ ...formData, action_level: value });
+                      setFormData(prev => ({ ...prev, action_level: value }));
                     }}
                     keyboardType="number-pad"
                   />

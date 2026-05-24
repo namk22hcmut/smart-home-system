@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { apiService } from '../../services/api';
 import { theme } from '../../styles/theme';
+import { formatShortTime } from '../../utils/time';
 
 export default function SystemStats({ navigation }) {
   const [stats, setStats] = useState(null);
@@ -129,7 +130,7 @@ export default function SystemStats({ navigation }) {
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Last Updated: {new Date().toLocaleTimeString()}</Text>
+        <Text style={styles.footerText}>Last Updated: {formatShortTime(new Date().toISOString())}</Text>
       </View>
     </ScrollView>
   );

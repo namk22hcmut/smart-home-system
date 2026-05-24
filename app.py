@@ -217,6 +217,71 @@ ADAFRUIT_API_URL = 'https://io.adafruit.com/api/v2'
 
 mqtt_client = mqtt.Client()
 
+TARGET_HOUSE_ID = 1
+TARGET_FLOOR_ID = 1
+TARGET_ROOM_ID = 1
+
+def _get_target_room():
+    """Return the only room that exchanges data with Adafruit."""
+    return (
+        Room.query
+        .join(Floor, Room.floor_id == Floor.floor_id)
+        .filter(
+            Floor.house_id == TARGET_HOUSE_ID,
+            Floor.floor_id == TARGET_FLOOR_ID,
+            Room.room_id == TARGET_ROOM_ID,
+        )
+        .first()
+    )
+
+def _is_target_room_id(room_id):
+    try:
+        return int(room_id) == TARGET_ROOM_ID
+    except (TypeError, ValueError):
+        return False
+
+def _resolve_device_feed_key(device_type):
+    if not device_type:
+        return None
+    device_type = str(device_type).strip().lower()
+    if device_type == 'light':
+        return 'home-led'
+    if device_type == 'fan':
+        return 'fan'
+    return None
+
+def _resolve_sensor_feed_key(sensor_type):
+    if not sensor_type:
+        return None
+    sensor_type = str(sensor_type).strip().lower()
+    if sensor_type in ['temperature', 'humidity', 'motion', 'light', 'co2', 'pressure']:
+        return sensor_type
+    return None
+
+def _build_feed_name(room, entity_name):
+    room_name = room.room_name if room else f"room_{TARGET_ROOM_ID}"
+    return f"{room_name} {entity_name}".strip()
+
+def _subscribe_target_feed_mappings(client):
+    target_room = _get_target_room()
+    if not target_room:
+        logger.warning("⚠️ Target room house_id=1/floor_id=1/room_id=1 not found; no Adafruit subscriptions")
+        return
+
+    mappings = AdafruitFeedMapping.query.filter_by(
+        room_id=target_room.room_id,
+        is_active=True
+    ).all()
+
+    if not mappings:
+        logger.warning("⚠️ No active target-room feed mappings found; not subscribing to wildcard")
+        return
+
+    for mapping in mappings:
+        topic = f"{ADAFRUIT_USERNAME}/feeds/{mapping.feed_key}"
+        client.subscribe(topic)
+        logger.info(f"📡 Subscribed: {topic}")
+
 def create_adafruit_feed(feed_key, feed_name):
     """Create a feed in Adafruit IO via REST API"""
     headers = {
@@ -253,19 +318,9 @@ def on_connect(client, userdata, flags, rc):
         # 🔥 Dynamic subscribe from database
         try:
             with app.app_context():
-                mappings = AdafruitFeedMapping.query.filter_by(is_active=True).all()
-                
-                if not mappings:
-                    logger.warning("⚠️ No feed mappings found. Using wildcard subscribe...")
-                    client.subscribe(f"{ADAFRUIT_USERNAME}/feeds/#")
-                else:
-                    for mapping in mappings:
-                        topic = f"{ADAFRUIT_USERNAME}/feeds/{mapping.feed_key}"
-                        client.subscribe(topic)
-                        logger.info(f"📡 Subscribed: {topic}")
+                _subscribe_target_feed_mappings(client)
         except Exception as e:
-            logger.warning(f"⚠️ Subscribe error: {e}. Falling back to wildcard...")
-            client.subscribe(f"{ADAFRUIT_USERNAME}/feeds/#")
+            logger.warning(f"⚠️ Subscribe error: {e}")
     else:
         logger.error(f"❌ MQTT connection failed with code {rc}")
 
@@ -284,14 +339,20 @@ def on_message(client, userdata, msg):
                 feed_key = parts[1]
                 logger.info(f"🔍 Feed key: {feed_key}")
                 
-                # ✅ Look up mapping by feed_key (PRIMARY LOOKUP)
+                target_room = _get_target_room()
+                if not target_room:
+                    logger.warning("⚠️ Target room house_id=1/floor_id=1/room_id=1 not found; ignoring Adafruit message")
+                    return
+
+                # Only target room mappings are allowed to exchange data with Adafruit.
                 mapping = AdafruitFeedMapping.query.filter_by(
                     feed_key=feed_key,
+                    room_id=target_room.room_id,
                     is_active=True
                 ).first()
                 
                 if not mapping:
-                    logger.warning(f"⚠️ No mapping found for feed: {feed_key}")
+                    logger.warning(f"⚠️ No target-room mapping found for feed: {feed_key}")
                     return
                 
                 logger.info(f"✅ Found mapping: {mapping.to_dict()}")
@@ -338,7 +399,10 @@ def on_message(client, userdata, msg):
                         # Apply conversion based on data_key
                         if mapping.data_key == 'status':
                             # Status: "on"/"off" or 0/1
-                            new_status = 'on' if (value or payload.lower() in ['on', 'true', '1']) else 'off'
+                            if isinstance(value, (int, float)):
+                                new_status = 'on' if value > 0 else 'off'
+                            else:
+                                new_status = 'on' if str(payload).lower() in ['on', 'true', '1'] else 'off'
                             device.status = new_status
                             
                             data_update = {
@@ -408,10 +472,14 @@ def publish_device_command(device_id, command_type, value):
         if not device:
             logger.error(f"❌ Device not found: {device_id}")
             return False
+        if not _is_target_room_id(device.room_id):
+            logger.info(f"⏭️ Device {device_id} is outside target room; Adafruit publish skipped")
+            return False
         
         # Find mapping for this device
         mapping = AdafruitFeedMapping.query.filter_by(
             device_id=device_id,
+            room_id=TARGET_ROOM_ID,
             feed_type='device',
             is_active=True
         ).first()
@@ -462,8 +530,8 @@ def publish_device_command(device_id, command_type, value):
 # =====================================================
 
 def sync_devices_to_adafruit():
-    """Create mappings for ALL sensors/devices to 3 fixed Adafruit feeds"""
-    logger.info("🔄 Starting sync_devices_to_adafruit() - Mapping ALL sensors to 3 feeds...")
+    """Create Adafruit mappings only for house_id=1, floor_id=1, room_id=1."""
+    logger.info("🔄 Starting sync_devices_to_adafruit() for target room only")
     
     try:
         with app.app_context():
@@ -471,94 +539,68 @@ def sync_devices_to_adafruit():
             AdafruitFeedMapping.query.delete()
             db.session.commit()
             logger.info("🗑️ Cleared old feed mappings")
-            
-            # Define the 3 fixed feeds
-            FIXED_FEEDS = [
-                {
-                    'feed_key': 'temperature',
-                    'feed_name': 'Temperature Sensor',
-                    'feed_type': 'sensor',
-                    'sensor_type': 'temperature',
-                },
-                {
-                    'feed_key': 'humidity',
-                    'feed_name': 'Humidity Sensor',
-                    'feed_type': 'sensor',
-                    'sensor_type': 'humidity',
-                },
-                {
-                    'feed_key': 'fan',
-                    'feed_name': 'Fan Device',
-                    'feed_type': 'device',
-                    'device_type': 'fan',
-                },
-            ]
-            
-            for feed_config in FIXED_FEEDS:
-                try:
-                    if feed_config['feed_type'] == 'sensor':
-                        # Get ALL sensors of this type
-                        sensors = Sensor.query.filter_by(
-                            sensor_type=feed_config['sensor_type']
-                        ).all()
-                        
-                        for sensor in sensors:
-                            # Get house_id and room_id from sensor's room
-                            house_id = None
-                            room_id = sensor.room_id
-                            if sensor.room and sensor.room.floor and sensor.room.floor.house:
-                                house_id = sensor.room.floor.house_id
-                            
-                            # Create mapping for EACH sensor
-                            mapping = AdafruitFeedMapping(
-                                feed_key=feed_config['feed_key'],
-                                feed_name=feed_config['feed_name'],
-                                sensor_id=sensor.sensor_id,
-                                house_id=house_id,
-                                room_id=room_id,
-                                feed_type='sensor',
-                                conversion_factor=1.0,
-                                is_active=True
-                            )
-                            db.session.add(mapping)
-                            logger.info(f"📡 Mapped: feed_key={feed_config['feed_key']} → sensor_id={sensor.sensor_id} (type: {sensor.sensor_type})")
-                    
-                    elif feed_config['feed_type'] == 'device':
-                        # Get ALL devices of this type
-                        devices = Device.query.filter_by(
-                            device_type=feed_config['device_type']
-                        ).all()
-                        
-                        for device in devices:
-                            # Get house_id and room_id from device's room
-                            house_id = None
-                            room_id = device.room_id
-                            if device.room and device.room.floor and device.room.floor.house:
-                                house_id = device.room.floor.house_id
-                            
-                            # Create mapping for EACH device
-                            mapping = AdafruitFeedMapping(
-                                feed_key=feed_config['feed_key'],
-                                feed_name=feed_config['feed_name'],
-                                device_id=device.device_id,
-                                house_id=house_id,
-                                room_id=room_id,
-                                feed_type='device',
-                                data_key='level',
-                                conversion_factor=1.0,
-                                is_active=True
-                            )
-                            db.session.add(mapping)
-                            logger.info(f"📡 Mapped: feed_key={feed_config['feed_key']} → device_id={device.device_id} (type: {device.device_type})")
-                    
-                except Exception as e:
-                    logger.error(f"Error creating feeds for {feed_config['feed_key']}: {e}")
-                    db.session.rollback()
+
+            target_room = _get_target_room()
+            if not target_room:
+                logger.error("❌ Target room house_id=1/floor_id=1/room_id=1 not found")
+                return False
+
+            house_id = target_room.floor.house_id if target_room.floor else TARGET_HOUSE_ID
+            used_feed_keys = set()
+
+            for sensor in target_room.sensors:
+                feed_key = _resolve_sensor_feed_key(sensor.sensor_type)
+                if not feed_key:
                     continue
+                if feed_key in used_feed_keys:
+                    logger.warning(f"⚠️ Duplicate target-room sensor feed skipped: {feed_key}")
+                    continue
+
+                feed_name = _build_feed_name(target_room, sensor.sensor_name)
+                create_adafruit_feed(feed_key, feed_name)
+                mapping = AdafruitFeedMapping(
+                    feed_key=feed_key,
+                    feed_name=feed_name,
+                    sensor_id=sensor.sensor_id,
+                    house_id=house_id,
+                    room_id=target_room.room_id,
+                    feed_type='sensor',
+                    conversion_factor=1.0,
+                    is_active=True
+                )
+                db.session.add(mapping)
+                used_feed_keys.add(feed_key)
+                logger.info(f"📡 Mapped target sensor: {feed_key} → sensor_id={sensor.sensor_id}")
+
+            for device in target_room.devices:
+                feed_key = _resolve_device_feed_key(device.device_type)
+                if not feed_key:
+                    continue
+                if feed_key in used_feed_keys:
+                    logger.warning(f"⚠️ Duplicate target-room device feed skipped: {feed_key}")
+                    continue
+
+                feed_name = _build_feed_name(target_room, device.device_name)
+                create_adafruit_feed(feed_key, feed_name)
+                mapping = AdafruitFeedMapping(
+                    feed_key=feed_key,
+                    feed_name=feed_name,
+                    device_id=device.device_id,
+                    house_id=house_id,
+                    room_id=target_room.room_id,
+                    feed_type='device',
+                    data_key='level' if device.device_type == 'fan' else 'status',
+                    conversion_factor=1.0,
+                    is_active=True
+                )
+                db.session.add(mapping)
+                used_feed_keys.add(feed_key)
+                logger.info(f"📡 Mapped target device: {feed_key} → device_id={device.device_id}")
             
             db.session.commit()
             total_mappings = AdafruitFeedMapping.query.count()
             logger.info(f"✅ Sync complete! Created {total_mappings} total feed mappings")
+            _subscribe_target_feed_mappings(mqtt_client)
             return True
             
     except Exception as e:
@@ -567,31 +609,43 @@ def sync_devices_to_adafruit():
         return False
 
 def simulate_sensor_data():
-    """Simulate sensor data for testing (publish random values to Adafruit)"""
+    """Generate local database data for non-target rooms only."""
     import random
     
     try:
         with app.app_context():
-            # Simulate 3 fixed feeds
-            FEEDS_TO_SIMULATE = {
-                'temperature': (18, 35, '°C'),      # 18-35°C
-                'humidity': (30, 90, '%'),          # 30-90%
-                'fan': (0, 100, '%'),               # 0-100%
-            }
-            
-            for feed_key, (min_val, max_val, unit) in FEEDS_TO_SIMULATE.items():
-                try:
-                    value = random.uniform(min_val, max_val)
-                    
-                    # Publish to Adafruit
-                    topic = f"{ADAFRUIT_USERNAME}/feeds/{feed_key}"
-                    mqtt_client.publish(topic, str(round(value, 2)), qos=1)
-                    logger.info(f"📤 Simulated: {feed_key} = {value:.2f}{unit}")
-                except Exception as e:
-                    logger.error(f"Error simulating feed {feed_key}: {e}")
-                    continue
+            sensors = Sensor.query.filter(Sensor.room_id != TARGET_ROOM_ID).all()
+            for sensor in sensors:
+                if sensor.sensor_type == 'temperature':
+                    value = round(random.uniform(18, 35), 2)
+                elif sensor.sensor_type == 'humidity':
+                    value = round(random.uniform(30, 90), 2)
+                elif sensor.sensor_type == 'co2':
+                    value = round(random.uniform(350, 1200), 2)
+                elif sensor.sensor_type == 'light':
+                    value = round(random.uniform(0, 1200), 2)
+                elif sensor.sensor_type == 'motion':
+                    value = random.choice([0, 1])
+                else:
+                    value = round(random.uniform(0, 100), 2)
+
+                db.session.add(SensorData(sensor_id=sensor.sensor_id, value=value))
+
+            devices = Device.query.filter(Device.room_id != TARGET_ROOM_ID).all()
+            for device in devices:
+                if device.device_type == 'light':
+                    device.status = random.choice(['on', 'off'])
+                    device.level = 0
+                else:
+                    device.level = random.randint(0, 100)
+                    device.status = 'on' if device.level > 0 else 'off'
+                device.updated_at = datetime.utcnow()
+
+            db.session.commit()
+            logger.info(f"✅ Generated local DB data for {len(sensors)} sensors and {len(devices)} devices outside target room")
                     
     except Exception as e:
+        db.session.rollback()
         logger.error(f"❌ Simulation error: {e}")
 
 try:
@@ -653,19 +707,19 @@ def schedule_executor():
                     time_diff = abs((datetime.combine(now.date(), schedule.scheduled_time) - 
                                    datetime.combine(now.date(), current_time)).total_seconds())
                     
-                    if time_diff < 60:  # Within 1-minute window
-                        # Check if already triggered today
-                        if schedule.last_triggered_at:
-                            last_trigger_date = schedule.last_triggered_at.date()
-                            if last_trigger_date == now.date():
-                                continue  # Already triggered today
-                        
+                    if time_diff < 60 and not (
+                        schedule.last_triggered_at and schedule.last_triggered_at.date() == now.date()
+                    ):  # Within 1-minute window and not already triggered today
+
                         # Execute schedule
                         device = Device.query.get(schedule.device_id)
                         if device:
                             # Set device status
                             device.status = schedule.action_status
-                            device.level = schedule.action_level if schedule.action_status == 'on' else 0
+                            if device.device_type == 'fan' and schedule.action_status == 'on':
+                                device.level = max(0, min(100, int(schedule.action_level or 0)))
+                            else:
+                                device.level = 0
                             schedule.last_triggered_at = now
                             
                             # If duration > 0, calculate auto-off time
@@ -677,6 +731,12 @@ def schedule_executor():
                                 schedule.auto_off_at = None
                             
                             db.session.commit()
+
+                            if _is_target_room_id(device.room_id):
+                                if device.device_type == 'fan':
+                                    publish_device_command(device.device_id, 'level', device.level)
+                                else:
+                                    publish_device_command(device.device_id, 'status', device.status)
                             
                             # Log activity
                             log = DeviceActivityLog(
@@ -741,6 +801,12 @@ def schedule_executor():
                             device.level = 0
                             schedule.auto_off_at = None  # Clear auto-off time
                             db.session.commit()
+
+                            if _is_target_room_id(device.room_id):
+                                if device.device_type == 'fan':
+                                    publish_device_command(device.device_id, 'level', 0)
+                                else:
+                                    publish_device_command(device.device_id, 'status', 'off')
                             
                             # Log activity
                             log = DeviceActivityLog(
@@ -1343,7 +1409,7 @@ def post_device_status():
         data = request.json
         device_id = data.get('device_id')
         status = data.get('status')  # 'on' or 'off'
-        level = data.get('level', 0)  # 0-100
+        level = data.get('level')  # 0-100
         
         device = Device.query.get(device_id)
         if not device:
@@ -1356,9 +1422,19 @@ def post_device_status():
         if status:
             device.status = status
         
-        # Update level if valid
-        if isinstance(level, int) and 0 <= level <= 100:
-            device.level = level
+        # Only fans have a level. Other device types are status-only.
+        if device.device_type != 'fan':
+            device.level = 0
+            level = 0
+        elif level is not None:
+            try:
+                level = max(0, min(100, int(float(level))))
+                device.level = level
+                device.status = 'on' if level > 0 else 'off'
+            except (TypeError, ValueError):
+                level = old_level
+        else:
+            level = old_level
         
         device.updated_at = datetime.utcnow()
         db.session.commit()
@@ -1379,6 +1455,29 @@ def post_device_status():
         
         logger.info(f"🔌 Device {device_id}: status={device.status}, level={device.level}")
         
+        try:
+            if _is_target_room_id(device.room_id):
+                mapping = AdafruitFeedMapping.query.filter_by(
+                    device_id=device_id,
+                    room_id=TARGET_ROOM_ID,
+                    feed_type='device',
+                    is_active=True
+                ).first()
+
+                if mapping:
+                    if mapping.data_key == 'status':
+                        if status is not None and status != old_status:
+                            publish_device_command(device_id, 'status', device.status)
+                    elif mapping.data_key == 'level':
+                        if level != old_level:
+                            publish_device_command(device_id, 'level', device.level)
+                    else:
+                        logger.warning(f"⚠️ Unsupported device mapping data_key={mapping.data_key} for device {device_id}")
+                else:
+                    logger.warning(f"⚠️ No Adafruit mapping found for target-room device {device_id}")
+        except Exception as publish_error:
+            logger.warning(f"⚠️ Failed to publish device {device_id} to Adafruit: {publish_error}")
+
         return jsonify({'success': True, 'id': device_id, 'status': device.status, 'level': device.level}), 200
     except Exception as e:
         db.session.rollback()
@@ -1404,26 +1503,22 @@ def create_device():
         db.session.add(device)
         db.session.flush()  # Get device_id
         
-        # ✅ Phase 2: Map to fixed Adafruit feeds (DO NOT create new feeds)
+        # Only devices in house_id=1/floor_id=1/room_id=1 exchange data with Adafruit.
         try:
             room = Room.query.get(device.room_id)
-            if room:
-                # Determine which fixed feed to map to
-                if device.device_type == 'fan':
-                    feed_key = 'fan'  # Only fans map to Adafruit
-                else:
-                    feed_key = None  # Other device types don't map
+            if room and _is_target_room_id(room.room_id):
+                feed_key = _resolve_device_feed_key(device.device_type)
                 
                 if feed_key:
-                    # Map to existing fixed feed (no new feed creation)
+                    create_adafruit_feed(feed_key, _build_feed_name(room, device.device_name))
                     mapping = AdafruitFeedMapping(
                         feed_key=feed_key,
-                        feed_name=f"{room.room_name} {device.device_name}",
+                        feed_name=_build_feed_name(room, device.device_name),
                         device_id=device.device_id,
                         house_id=room.floor.house_id,
                         room_id=room.room_id,
                         feed_type='device',
-                        data_key='level',
+                        data_key='level' if device.device_type == 'fan' else 'status',
                         conversion_factor=1.0,
                         is_active=True
                     )
@@ -1586,7 +1681,10 @@ def update_device(device_id):
         device.device_name = data.get('device_name', device.device_name)
         device.device_type = data.get('device_type', device.device_type)
         device.status = data.get('status', device.status)
-        device.level = data.get('level', device.level)
+        if device.device_type == 'fan':
+            device.level = data.get('level', device.level)
+        else:
+            device.level = 0
         device.updated_at = datetime.utcnow()
         
         # 🔥 Publish command to Adafruit if status/level changed
@@ -1594,7 +1692,7 @@ def update_device(device_id):
             logger.info(f"📤 Status changed: {old_status} → {device.status}")
             publish_device_command(device_id, 'status', device.status)
         
-        if data.get('level') is not None and data.get('level') != old_level:
+        if device.device_type == 'fan' and data.get('level') is not None and data.get('level') != old_level:
             logger.info(f"📤 Level changed: {old_level} → {device.level}")
             publish_device_command(device_id, 'level', device.level)
         
@@ -1605,7 +1703,7 @@ def update_device(device_id):
         log = DeviceActivityLog(
             device_id=device_id,
             user_id=request.user_id,
-            action='set_level' if (data.get('level') is not None and data.get('level') != old_level) else ('turn_on' if device.status == 'on' else 'turn_off'),
+            action='set_level' if (device.device_type == 'fan' and data.get('level') is not None and data.get('level') != old_level) else ('turn_on' if device.status == 'on' else 'turn_off'),
             old_status=old_status,
             new_status=device.status,
             old_level=old_level,
@@ -1685,20 +1783,15 @@ def create_sensor():
         db.session.add(sensor)
         db.session.flush()  # Get sensor_id
         
-        # ✅ Phase 2: Map to fixed Adafruit feeds (DO NOT create new feeds)
+        # Only sensors in house_id=1/floor_id=1/room_id=1 exchange data with Adafruit.
         try:
-            # Determine which fixed feed to map to
-            if sensor.sensor_type in ['temperature', 'humidity']:
-                feed_key = sensor.sensor_type  # "temperature" or "humidity"
-            else:
-                # Other sensor types don't map to Adafruit
-                feed_key = None
+            feed_key = _resolve_sensor_feed_key(sensor.sensor_type) if _is_target_room_id(room.room_id) else None
             
             if feed_key:
-                # Map to existing fixed feed (no new feed creation)
+                create_adafruit_feed(feed_key, _build_feed_name(room, sensor.sensor_name))
                 mapping = AdafruitFeedMapping(
                     feed_key=feed_key,
-                    feed_name=f"{room.room_name} {sensor.sensor_name}",
+                    feed_name=_build_feed_name(room, sensor.sensor_name),
                     sensor_id=sensor.sensor_id,
                     house_id=house.house_id,
                     room_id=room.room_id,
@@ -2510,6 +2603,13 @@ def create_device_schedule(device_id):
         # Validate duration
         if not isinstance(duration_minutes, int) or duration_minutes < 0:
             return jsonify({'success': False, 'error': 'duration_minutes must be >= 0'}), 400
+
+        try:
+            action_level = max(0, min(100, int(action_level or 0)))
+        except (TypeError, ValueError):
+            action_level = 0
+        if device.device_type != 'fan' or action_status == 'off':
+            action_level = 0
         
         # Parse time
         try:
@@ -2610,7 +2710,10 @@ def update_schedule(schedule_id):
         if 'action_status' in data:
             schedule.action_status = data['action_status']
         if 'action_level' in data:
-            schedule.action_level = data['action_level']
+            try:
+                schedule.action_level = max(0, min(100, int(data['action_level'] or 0)))
+            except (TypeError, ValueError):
+                schedule.action_level = 0
         if 'duration_minutes' in data:
             if not isinstance(data['duration_minutes'], int) or data['duration_minutes'] < 0:
                 return jsonify({'success': False, 'error': 'duration_minutes must be >= 0'}), 400
@@ -2619,6 +2722,10 @@ def update_schedule(schedule_id):
             schedule.days_of_week = data['days_of_week']
         if 'is_active' in data:
             schedule.is_active = data['is_active']
+
+        device = Device.query.get(schedule.device_id)
+        if device and (device.device_type != 'fan' or schedule.action_status == 'off'):
+            schedule.action_level = 0
         
         db.session.commit()
         
@@ -3037,6 +3144,18 @@ def create_adafruit_mapping():
         for field in required:
             if field not in data:
                 return jsonify({'success': False, 'error': f'Missing required field: {field}'}), 400
+
+        try:
+            mapping_house_id = int(data.get('house_id'))
+            mapping_room_id = int(data.get('room_id'))
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'house_id and room_id must be integers'}), 400
+
+        if mapping_house_id != TARGET_HOUSE_ID or mapping_room_id != TARGET_ROOM_ID:
+            return jsonify({
+                'success': False,
+                'error': 'Only house_id=1, floor_id=1, room_id=1 can be mapped to Adafruit'
+            }), 400
         
         # Check authorization
         user_house = UserHouseAccess.query.filter_by(
@@ -3176,6 +3295,13 @@ def get_adafruit_data(feed_key):
         }
         
         limit = request.args.get('limit', '30')
+        mapping = AdafruitFeedMapping.query.filter_by(
+            feed_key=feed_key,
+            room_id=TARGET_ROOM_ID,
+            is_active=True
+        ).first()
+        if not mapping:
+            return jsonify({'success': False, 'error': 'Feed is not mapped to target room'}), 404
         
         url = f'{ADAFRUIT_API_URL}/{ADAFRUIT_USERNAME}/feeds/{feed_key}/data'
         response = requests.get(
@@ -3223,6 +3349,7 @@ def fetch_live_adafruit_data():
         # Get mapping by sensor_id
         mapping = AdafruitFeedMapping.query.filter_by(
             sensor_id=sensor_id,
+            room_id=TARGET_ROOM_ID,
             feed_type='sensor',
             is_active=True
         ).first()

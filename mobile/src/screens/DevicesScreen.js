@@ -20,8 +20,9 @@ import {
 import { Picker } from '@react-native-picker/picker';
 import { MaterialIcons } from '@expo/vector-icons';
 import { apiService } from '../services/api';
-import { theme } from '../styles/theme';
 import CustomSlider from '../components/CustomSlider';
+import { theme } from '../styles/theme';
+
 
 export default function UserDevicesScreen({ navigation, route }) {
   const { roomId, roomName } = route.params;
@@ -38,7 +39,6 @@ export default function UserDevicesScreen({ navigation, route }) {
   });
   
   const [controllingDeviceId, setControllingDeviceId] = useState(null);
-  const [deviceLevels, setDeviceLevels] = useState({}); // Track device levels locally
 
   const deviceTypes = ['light', 'fan', 'ac', 'heater', 'thermostat', 'door_lock', 'camera', 'switch', 'plug', 'other'];
 
@@ -87,15 +87,6 @@ export default function UserDevicesScreen({ navigation, route }) {
           id: device.device_id ?? device.id,
         }));
         setDevices(normalizedDevices);
-        // Initialize device levels
-        const levels = {};
-        normalizedDevices.forEach(device => {
-          const deviceId = getDeviceId(device);
-          if (deviceId !== undefined && deviceId !== null) {
-            levels[deviceId] = device.level || 0;
-          }
-        });
-        setDeviceLevels(levels);
       }
     } catch (error) {
       console.error('Error loading devices:', error);
@@ -187,61 +178,31 @@ export default function UserDevicesScreen({ navigation, route }) {
 
     try {
       const newStatus = device.status === 'on' ? 'off' : 'on';
+      let newLevel = device.level || 0;
+      
+      // When turning OFF, set level to 0
+      if (newStatus === 'off') {
+        newLevel = 0;
+      } 
+      // When turning ON, set default level if currently 0
+      else if (newStatus === 'on' && (device.level === 0 || device.level === null || device.level === undefined)) {
+        newLevel = device.device_type === 'fan' ? 50 : 0;
+      }
+      
       const response = await apiService.post('/device-status', {
         device_id: deviceId,
         status: newStatus,
-        level: deviceLevels[deviceId] || 0,
+        level: newLevel,
       });
 
       if (response && response.success) {
         console.log('Device toggle response:', response);
-        // Refresh devices from server to ensure authoritative state
         await loadDevices(false);
       }
     } catch (error) {
       console.error('Error toggling device:', error);
       Alert.alert('Error', 'Failed to control device');
     }
-  };
-
-  // Set device level
-  const setDeviceLevel = async (device, level) => {
-    const deviceId = getDeviceId(device);
-    if (deviceId === undefined || deviceId === null) {
-      Alert.alert('Error', 'Invalid device id');
-      return;
-    }
-
-    try {
-      setDeviceLevels(prev => ({ ...prev, [deviceId]: level }));
-      
-      const response = await apiService.post('/device-status', {
-        device_id: deviceId,
-        status: device.status,
-        level: Math.round(level),
-      });
-
-      if (response && response.success) {
-        console.log('Device level set to', level);
-      }
-    } catch (error) {
-      console.error('Error setting device level:', error);
-    }
-  };
-
-  const openAddModal = () => {
-    setEditingDevice(null);
-    setFormData({ device_name: '', device_type: 'light' });
-    setModalVisible(true);
-  };
-
-  const handleEditDevice = (device) => {
-    setEditingDevice(device);
-    setFormData({
-      device_name: device.device_name || '',
-      device_type: device.device_type || 'light',
-    });
-    setModalVisible(true);
   };
 
   const handleSaveDevice = () => {
@@ -258,97 +219,128 @@ export default function UserDevicesScreen({ navigation, route }) {
     setModalVisible(false);
   };
 
-  const renderDeviceItem = ({ item }) => (
-    <View style={styles.deviceCard}>
-      <View style={styles.deviceHeader}>
-        <View style={styles.deviceInfo}>
-          <Text style={styles.deviceName} numberOfLines={1}>{item.device_name || 'Unnamed Device'}</Text>
-          <Text style={styles.deviceType}>{item.device_type || 'device'}</Text>
+  // Open add device modal
+  const openAddModal = () => {
+    setEditingDevice(null);
+    setFormData({ device_name: '', device_type: 'light' });
+    setModalVisible(true);
+  };
+
+  // Open edit device modal
+  const handleEditDevice = (device) => {
+    setEditingDevice(device);
+    setFormData({
+      device_name: device.device_name || device.name || '',
+      device_type: device.device_type || 'light',
+    });
+    setModalVisible(true);
+  };
+
+  // Update device level (fans only)
+  const updateDeviceLevel = async (device, level) => {
+    const deviceId = getDeviceId(device);
+    if (deviceId === undefined || deviceId === null) return;
+    try {
+      const normalizedLevel = Math.max(0, Math.min(100, Number(level) || 0));
+      await apiService.updateDevice(deviceId, normalizedLevel > 0 ? 'on' : 'off', normalizedLevel);
+      // Refresh devices to show updated level
+      await loadDevices(false);
+    } catch (error) {
+      console.error('Error updating device level:', error);
+      Alert.alert('Error', 'Failed to update device level');
+    }
+  };
+
+  const renderDeviceItem = ({ item }) => {
+    return (
+      <View style={styles.deviceCard}>
+        <View style={styles.deviceHeader}>
+          <View style={styles.deviceInfo}>
+            <Text style={styles.deviceName} numberOfLines={1}>{item.device_name || 'Unnamed Device'}</Text>
+            <Text style={styles.deviceType}>{item.device_type || 'device'}</Text>
+          </View>
+
+          <View style={styles.deviceActions}>
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => handleEditDevice(item)}
+              accessibilityLabel="Edit device"
+            >
+              <MaterialIcons name="edit" size={18} color={theme.colors.gray1} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => deleteDevice(item.id)}
+              accessibilityLabel="Delete device"
+            >
+              <MaterialIcons name="delete-outline" size={18} color={theme.colors.gray1} />
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <View style={styles.deviceActions}>
-          <TouchableOpacity
-            style={styles.iconButton}
-            onPress={() => handleEditDevice(item)}
-            accessibilityLabel="Edit device"
-          >
-            <MaterialIcons name="edit" size={18} color={theme.colors.gray1} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.iconButton}
-            onPress={() => deleteDevice(item.id)}
-            accessibilityLabel="Delete device"
-          >
-            <MaterialIcons name="delete-outline" size={18} color={theme.colors.gray1} />
-          </TouchableOpacity>
+          <View style={styles.controlSection}>
+          <View style={styles.statusRow}>
+            <Text style={styles.controlLabel}>Status</Text>
+            <TouchableOpacity
+              style={[
+                styles.statusToggle,
+                { backgroundColor: item.status === 'on' ? theme.colors.accent : theme.colors.gray2 }
+              ]}
+              onPress={() => toggleDeviceStatus(item)}
+            >
+              <Text style={styles.statusToggleText}>
+                {item.status === 'on' ? 'ON' : 'OFF'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {item.device_type === 'fan' && (
+            <View style={styles.sliderContainer}>
+              <Text style={styles.controlLabel}>Level</Text>
+              <CustomSlider
+                value={item.status === 'on' ? (typeof item.level === 'number' ? item.level : (item.level ? Number(item.level) : 1)) : 0}
+                onChange={(val) => updateDeviceLevel(item, val)}
+              />
+            </View>
+          )}
+
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[styles.scheduleBtn, styles.actionBtn]}
+              onPress={() => {
+                if (navigation.navigate) {
+                  navigation.navigate('DeviceScheduling', {
+                    device: item,
+                    deviceId: getDeviceId(item),
+                    deviceName: item.device_name,
+                  });
+                }
+              }}
+              activeOpacity={0.86}
+            >
+              <MaterialIcons name="schedule" size={16} color={theme.colors.card} />
+              <Text style={styles.scheduleBtnText}>Schedule</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.logsBtn, styles.actionBtn]}
+              onPress={() => {
+                if (navigation.navigate) {
+                  navigation.navigate('DeviceActivityLogs', {
+                    device: item,
+                  });
+                }
+              }}
+              activeOpacity={0.86}
+            >
+              <MaterialIcons name="history" size={16} color={theme.colors.card} />
+              <Text style={styles.scheduleBtnText}>Activity Log</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
-
-
-
-      <View style={styles.controlSection}>
-        <View style={styles.statusRow}>
-          <Text style={styles.controlLabel}>Status</Text>
-          <TouchableOpacity
-            style={[
-              styles.statusToggle,
-              { backgroundColor: item.status === 'on' ? theme.colors.accent : theme.colors.gray2 }
-            ]}
-            onPress={() => toggleDeviceStatus(item)}
-          >
-            <Text style={styles.statusToggleText}>
-              {item.status === 'on' ? 'ON' : 'OFF'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.levelRow}>
-          <Text style={styles.controlLabel}>Level: {Math.round(deviceLevels[getDeviceId(item)] || 0)}%</Text>
-          <CustomSlider
-            style={styles.slider}
-            min={0}
-            max={100}
-            value={deviceLevels[getDeviceId(item)] || 0}
-            onChange={(value) => setDeviceLevel(item, value)}
-          />
-        </View>
-
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.scheduleBtn, styles.actionBtn]}
-            onPress={() => {
-              if (navigation.navigate) {
-                navigation.navigate('DeviceScheduling', {
-                  device: item,
-                  deviceId: getDeviceId(item),
-                  deviceName: item.device_name,
-                });
-              }
-            }}
-            activeOpacity={0.86}
-          >
-            <MaterialIcons name="schedule" size={16} color={theme.colors.card} />
-            <Text style={styles.scheduleBtnText}>Schedule</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.logsBtn, styles.actionBtn]}
-            onPress={() => {
-              if (navigation.navigate) {
-                navigation.navigate('DeviceActivityLogs', {
-                  device: item,
-                });
-              }
-            }}
-            activeOpacity={0.86}
-          >
-            <MaterialIcons name="history" size={16} color={theme.colors.card} />
-            <Text style={styles.scheduleBtnText}>Activity Log</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -577,11 +569,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: theme.colors.card,
   },
-  levelRow: {
+  sliderContainer: {
+    alignItems: 'center',
     marginBottom: 16,
+    width: '100%',
   },
   slider: {
     marginTop: 8,
+    width: '100%',
   },
   scheduleBtn: {
     flexDirection: 'row',
@@ -606,10 +601,12 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: 'row',
     gap: 10,
+    alignItems: 'center',
   },
   actionBtn: {
     flex: 1,
   },
+  /* sliderContainer replaces previous levelRow styles */
   scheduleBtnText: {
     color: theme.colors.card,
     fontSize: 13,
