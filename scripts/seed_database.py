@@ -172,6 +172,8 @@ def seed_database():
                     sensors = [
                         {'name': 'Temperature', 'type': 'temperature', 'unit': '°C'},
                         {'name': 'Humidity', 'type': 'humidity', 'unit': '%'},
+                        {'name': 'Light', 'type': 'light', 'unit': 'lux'},
+                        {'name': 'Motion', 'type': 'motion', 'unit': 'boolean'},
                     ]
                     room_sensors = []
                     for sensor_data in sensors:
@@ -186,7 +188,7 @@ def seed_database():
                         room_sensors.append(sensor)
                     
                     # Add sample sensor data for automation rules testing
-                    # For first room in first house: add hot + humid readings to trigger Smart Fan rule
+                    # For first room in first house: add readings for all sensors used by the smart-home rules
                     if not hasattr(seed_database, '_first_room_sensors_added'):
                         for sensor in room_sensors:
                             if sensor.sensor_type == 'temperature':
@@ -202,6 +204,22 @@ def seed_database():
                                 sensor_reading = SensorData(
                                     sensor_id=sensor.sensor_id,
                                     value=85.0,
+                                    timestamp=datetime.utcnow()
+                                )
+                                db.session.add(sensor_reading)
+                            elif sensor.sensor_type == 'light':
+                                # Add reading: 650 lux (bright daylight range)
+                                sensor_reading = SensorData(
+                                    sensor_id=sensor.sensor_id,
+                                    value=650.0,
+                                    timestamp=datetime.utcnow()
+                                )
+                                db.session.add(sensor_reading)
+                            elif sensor.sensor_type == 'motion':
+                                # Add reading: 1 (motion detected)
+                                sensor_reading = SensorData(
+                                    sensor_id=sensor.sensor_id,
+                                    value=1.0,
                                     timestamp=datetime.utcnow()
                                 )
                                 db.session.add(sensor_reading)
@@ -571,7 +589,7 @@ def seed_database():
         print(f"  - Automation Rules: {automation_rules_created}")
         print(f"  - House shares: {shared_count}")
         print(f"  - Devices: {len(all_devices)} (all with level: 0-100)")
-        print(f"  - Sensors: {len(all_devices) * 2} (temperature, humidity)")
+        print(f"  - Sensors: {len(all_devices) * 4} (temperature, humidity, light, motion)")
         print("\nTest Credentials (ACTIVE):")
         print(f"  - User: bach / password123")
         print(f"  - User: testuser / password123")

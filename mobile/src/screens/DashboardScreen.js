@@ -18,7 +18,7 @@ import { apiService } from '../services/api';
 import adafruitService from '../services/adafruit';
 import realtimeService from '../services/realtime';
 import { MaterialIcons } from '@expo/vector-icons';
-import { LineChart, BarChart, PieChart } from 'react-native-chart-kit';
+import { LineChart, PieChart } from 'react-native-chart-kit';
 import { theme } from '../styles/theme';
 
 const parseISOToDate = (ts) => {
@@ -37,7 +37,6 @@ const DashboardScreen = ({ navigation }) => {
   const [selectedHouse, setSelectedHouse] = useState(null);
   const [showHouseSelector, setShowHouseSelector] = useState(false);
   const [stats, setStats] = useState(null);
-  const [deviceUsage, setDeviceUsage] = useState([]);
   const [adafruitSensors, setAdafruitSensors] = useState([]);
   const [sensorChartData, setSensorChartData] = useState(null);
   const [activities, setActivities] = useState([]);
@@ -129,28 +128,6 @@ const DashboardScreen = ({ navigation }) => {
       if (statsRes.success) setStats(statsRes.stats);
 
       // Fetch aggregated per-device usage for the house in a single request
-      try {
-        const dateStr = startDate.toISOString().slice(0, 10); // YYYY-MM-DD UTC
-        const houseUsage = await apiService.get(`/houses/${houseId}/device-usage-day?date=${dateStr}`);
-        if (houseUsage && houseUsage.success && Array.isArray(houseUsage.devices)) {
-          // Map to expected deviceUsage structure
-          const mapped = houseUsage.devices.map(d => ({
-            device_id: d.device_id,
-            device_name: d.device_name,
-            device_type: d.device_type,
-            status: d.status,
-            usage_minutes: d.usage_minutes,
-            usage_hours: d.usage_hours,
-            usage_display: `${Math.floor(d.usage_minutes/60)}h ${Math.floor(d.usage_minutes%60)}m`
-          }));
-          setDeviceUsage(mapped.sort((a,b) => b.usage_hours - a.usage_hours));
-        } else {
-          console.warn('House usage-day returned unexpected shape', houseUsage);
-        }
-      } catch (err) {
-        console.error('Error fetching house device-usage-day:', err.message || err);
-      }
-
       // Get activities
       const actRes = await apiService.get(`/houses/${houseId}/activity-logs?limit=20&start_date=${startDate.toISOString()}`);
       if (actRes.success) setActivities(actRes.logs || []);
@@ -169,7 +146,7 @@ const DashboardScreen = ({ navigation }) => {
       if (!selectedHouse?.house_id) return;
       const sensorData = await adafruitService.getAllSensorData(selectedHouse.house_id);
       
-      if (sensorData.success || (sensorData.temperature || sensorData.humidity)) {
+      if (sensorData.success || sensorData.temperature || sensorData.humidity || sensorData.light || sensorData.motion) {
         const sensors = [];
         if (sensorData.temperature?.success && sensorData.temperature?.chartData) {
           sensors.push({
@@ -185,6 +162,22 @@ const DashboardScreen = ({ navigation }) => {
             feed_key: 'humidity',
             latestValue: sensorData.humidity.latestValue,
             chartData: sensorData.humidity.chartData,
+          });
+        }
+        if (sensorData.light?.success && sensorData.light?.chartData) {
+          sensors.push({
+            name: 'Light',
+            feed_key: 'light',
+            latestValue: sensorData.light.latestValue,
+            chartData: sensorData.light.chartData,
+          });
+        }
+        if (sensorData.motion?.success && sensorData.motion?.chartData) {
+          sensors.push({
+            name: 'Motion',
+            feed_key: 'motion',
+            latestValue: sensorData.motion.latestValue,
+            chartData: sensorData.motion.chartData,
           });
         }
         setAdafruitSensors(sensors);
@@ -221,51 +214,6 @@ const DashboardScreen = ({ navigation }) => {
     setRefreshing(false);
   };
 
-  const renderDeviceUsageChart = () => {
-    if (!deviceUsage.length) return null;
-
-    // Show top 5 devices only
-    const topDevices = deviceUsage.slice(0, 5);
-    const chartData = {
-      labels: topDevices.map(d => d.device_name.substring(0, 10)),
-      datasets: [{
-        data: topDevices.map(d => parseFloat(d.usage_hours) || 0),
-      }],
-    };
-
-    return (
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <MaterialIcons name="schedule" size={24} color={theme.colors.primary} />
-          <Text style={styles.sectionTitle}>Device Usage Today</Text>
-        </View>
-        <View style={styles.chartContainer}>
-          <BarChart
-            data={chartData}
-            width={screenWidth - 32}
-            height={240}
-            chartConfig={{
-              backgroundColor: theme.colors.card,
-              backgroundGradientFrom: theme.colors.card,
-              backgroundGradientTo: theme.colors.card,
-              color: () => '#2196F3',
-              barPercentage: 0.6,
-              propsForLabels: {
-                fontSize: 11,
-              },
-            }}
-            style={styles.chart}
-          />
-        </View>
-        <View style={styles.usageList}>
-          {deviceUsage.map((device, idx) => (
-            <DeviceUsageRow key={idx} device={device} />
-          ))}
-        </View>
-      </View>
-    );
-  };
-
   const renderSensorSection = () => {
     if (!adafruitSensors.length) return null;
 
@@ -287,9 +235,27 @@ const DashboardScreen = ({ navigation }) => {
         {adafruitSensors.map((sensor, idx) => {
           const data = buildChartData(sensor);
           if (!data) return null;
-          const color = sensor.feed_key === 'humidity' ? '#2196F3' : '#FF9800';
+          const colorMap = {
+            temperature: '#FF9800',
+            humidity: '#2196F3',
+            light: '#F6C945',
+            motion: '#7E57C2',
+          };
+          const color = colorMap[sensor.feed_key] || '#FF9800';
           return (
             <View key={idx} style={styles.chartContainer}>
+              <View style={styles.chartHeader}>
+                <Text style={styles.chartTitle}>{sensor.name}</Text>
+                <Text style={[styles.chartSubtitle, { color }]}> 
+                  {sensor.feed_key === 'humidity'
+                    ? 'Xu hướng độ ẩm'
+                    : sensor.feed_key === 'light'
+                      ? 'Xu hướng độ sáng'
+                      : sensor.feed_key === 'motion'
+                        ? 'Xu hướng chuyển động'
+                        : 'Xu hướng nhiệt độ'}
+                </Text>
+              </View>
               <LineChart
                 data={data}
                 width={screenWidth - 32}
@@ -452,7 +418,6 @@ const DashboardScreen = ({ navigation }) => {
         {stats ? (
           <>
             {renderOverviewStats()}
-            {renderDeviceUsageChart()}
             {renderSensorSection()}
             {renderActivityTimeline()}
             <View style={styles.spacer} />
@@ -478,35 +443,14 @@ const StatBox = ({ icon, label, value, color }) => (
   </View>
 );
 
-const DeviceUsageRow = ({ device }) => (
-  <View style={styles.usageRow}>
-    <View style={styles.usageRowLeft}>
-      <Text style={styles.usageDeviceName}>{device.device_name}</Text>
-      <Text style={styles.usageDeviceType}>{device.device_type}</Text>
-    </View>
-    <View style={styles.usageRowRight}>
-      <Text style={[
-        styles.usageValue,
-        device.status === 'on' && styles.usageValueActive
-      ]}>
-        {device.usage_display}
-      </Text>
-      <Text style={[
-        styles.statusBadge,
-        device.status === 'on' ? styles.statusOn : styles.statusOff
-      ]}>
-        {device.status === 'on' ? '● On' : '● Off'}
-      </Text>
-    </View>
-  </View>
-);
-
 const SensorValueCard = ({ sensor }) => (
   <View style={styles.sensorCard}>
-    <Text style={styles.sensorName}>{sensor.name}</Text>
+    <Text style={styles.sensorName}>{sensor.name === 'Temperature' ? 'Nhiệt độ' : sensor.name === 'Humidity' ? 'Độ ẩm' : sensor.name === 'Light' ? 'Ánh sáng' : sensor.name === 'Motion' ? 'Chuyển động' : sensor.name}</Text>
     <Text style={styles.sensorValue}>
       {sensor.latestValue?.toFixed(1) || '—'}
-      <Text style={styles.sensorUnit}>{sensor.feed_key === 'humidity' ? '%' : '°'}</Text>
+      <Text style={styles.sensorUnit}>
+        {sensor.feed_key === 'humidity' ? '%' : sensor.feed_key === 'light' ? ' lux' : sensor.feed_key === 'motion' ? '' : '°C'}
+      </Text>
     </Text>
   </View>
 );
@@ -631,7 +575,21 @@ const styles = StyleSheet.create({
     padding: 8,
     marginVertical: 12,
     elevation: 2,
-    alignItems: 'center',
+  },
+  chartHeader: {
+    paddingHorizontal: 4,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  chartTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.text,
+  },
+  chartSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: '600',
   },
   chart: {
     borderRadius: 8,

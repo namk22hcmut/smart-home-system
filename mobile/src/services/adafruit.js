@@ -165,7 +165,7 @@ export const adafruitService = {
   },
 
   /**
-   * Get all sensor data (temperature + humidity) for a house
+   * Get all sensor data (temperature, humidity, light, motion) for a house
    */
   getAllSensorData: async (houseId) => {
     try {
@@ -177,16 +177,22 @@ export const adafruitService = {
       const sensors = await adafruitService.getHouseSensors(houseId);
       const temperatureSensor = sensors.find(sensor => sensor.type === 'temperature');
       const humiditySensor = sensors.find(sensor => sensor.type === 'humidity');
+      const lightSensor = sensors.find(sensor => sensor.type === 'light');
+      const motionSensor = sensors.find(sensor => sensor.type === 'motion');
 
-      const [tempResult, humidityResult] = await Promise.all([
+      const [tempResult, humidityResult, lightResult, motionResult] = await Promise.all([
         temperatureSensor ? adafruitService.getTemperatureData(48, temperatureSensor.id) : Promise.resolve({ success: false }),
         humiditySensor ? adafruitService.getHumidityData(48, humiditySensor.id) : Promise.resolve({ success: false }),
+        lightSensor ? adafruitService.getSensorHistoryData(lightSensor.id, 48) : Promise.resolve({ success: false }),
+        motionSensor ? adafruitService.getSensorHistoryData(motionSensor.id, 48) : Promise.resolve({ success: false }),
       ]);
 
       return {
-        success: tempResult.success && humidityResult.success,
+        success: tempResult.success || humidityResult.success || lightResult.success || motionResult.success,
         temperature: tempResult,
         humidity: humidityResult,
+        light: lightResult,
+        motion: motionResult,
       };
     } catch (error) {
       console.error('❌ Sensor data fetch error:', error.message);
